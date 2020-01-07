@@ -18,6 +18,7 @@ use craft\i18n\Locale;
 use craft\models\Section;
 use craft\services\Sites;
 use craft\web\AssetBundle;
+use craft\web\assets\axios\AxiosAsset;
 use craft\web\assets\d3\D3Asset;
 use craft\web\assets\datepickeri18n\DatepickerI18nAsset;
 use craft\web\assets\elementresizedetector\ElementResizeDetectorAsset;
@@ -47,9 +48,10 @@ class CpAsset extends AssetBundle
      */
     public function init()
     {
-        $this->sourcePath = __DIR__.'/dist';
+        $this->sourcePath = __DIR__ . '/dist';
 
         $this->depends = [
+            AxiosAsset::class,
             D3Asset::class,
             ElementResizeDetectorAsset::class,
             GarnishAsset::class,
@@ -71,7 +73,7 @@ class CpAsset extends AssetBundle
             'css/charts.css',
         ];
 
-        $this->js[] = 'js/Craft'.$this->dotJs();
+        $this->js[] = 'js/Craft' . $this->dotJs();
 
         parent::init();
     }
@@ -103,53 +105,73 @@ JS;
         $view->registerTranslations('app', [
             '(blank)',
             '1 Available Update',
+            '{first}-{last} of {total}',
             'Actions',
             'All',
             'An unknown error occurred.',
             'Any changes will be lost if you leave this page.',
             'Apply this to the {number} remaining conflicts?',
+            'Are you sure you want to delete this draft?',
             'Are you sure you want to delete this image?',
             'Are you sure you want to delete “{name}”?',
             'Are you sure you want to transfer your license to this domain?',
             'Buy {name}',
+            'by {creator}',
             'Cancel',
             'Choose a user',
             'Choose which table columns should be visible for this source, and in which order.',
-            'Close',
             'Close Live Preview',
+            'Close',
             'Continue',
             'Couldn’t delete “{name}”.',
             'Couldn’t save new order.',
             'Create',
-            'Delete',
+            'day',
+            'days',
             'Delete folder',
             'Delete heading',
             'Delete it',
+            'Delete them',
             'Delete user',
             'Delete users',
+            'Delete',
             'Display as thumbnails',
             'Display in a table',
             'Done',
+            'Draft Name',
+            'Drafts',
             'Edit',
+            'Edit draft settings',
+            'Element',
+            'Elements',
             'Enter the name of the folder',
             'Enter your password to continue.',
             'Enter your password to log back in.',
+            'Export',
+            'Export…',
             'Failed',
+            'Format',
             'Give your tab a name.',
             'Handle',
             'Heading',
-            'Hide',
             'Hide sidebar',
+            'Hide',
+            'hour',
+            'hours',
             'Incorrect password.',
             'Instructions',
             'Keep both',
             'Keep me logged in',
+            'Keep them',
             'License transferred.',
+            'Limit',
             'Log out now',
             'Login',
             'Make not required',
             'Make required',
             'Merge the folder (any conflicting files will be replaced)',
+            'minute',
+            'minutes',
             'More',
             'Move',
             'Name',
@@ -162,52 +184,55 @@ JS;
             'New subfolder',
             'New {group} category',
             'New {section} entry',
+            'Next Page',
+            'No limit',
+            'Notes',
             'OK',
             'Options',
             'Password',
             'Pay {price}',
             'Pending',
+            'Previous Page',
             'Really delete folder “{folder}”?',
             'Remove',
-            'Rename',
             'Rename folder',
+            'Rename',
             'Reorder',
             'Replace it',
             'Replace the folder (all existing files will be deleted)',
+            'Save as a new asset',
             'Save',
+            'Saving',
             'Score',
             'Search in subfolders',
-            'Select',
+            'second',
+            'seconds',
             'Select transform',
+            'Select',
             'Settings',
-            'Show',
             'Show nav',
             'Show sidebar',
+            'Show',
             'Show/hide children',
             'Sort by {attribute}',
             'Source settings saved',
             'Structure',
             'Submit',
             'Table Columns',
+            'The draft could not be saved.',
+            'The draft has been saved.',
             'This can be left blank if you just want an unlabeled separator.',
             'Transfer it to:',
             'Try again',
+            'Update {type}',
             'Upload failed for {filename}',
             'Upload files',
+            'week',
+            'weeks',
             'What do you want to do with their content?',
             'What do you want to do?',
             'Your session has ended.',
             'Your session will expire in {time}.',
-            'day',
-            'days',
-            'hour',
-            'hours',
-            'minute',
-            'minutes',
-            'second',
-            'seconds',
-            'week',
-            'weeks',
             '{ctrl}C to copy.',
             '{num} Available Updates',
             '“{name}” deleted.',
@@ -216,29 +241,32 @@ JS;
 
     private function _craftData(): array
     {
+        $upToDate = Craft::$app->getIsInstalled() && !Craft::$app->getUpdates()->getIsCraftDbMigrationNeeded();
         $request = Craft::$app->getRequest();
         $generalConfig = Craft::$app->getConfig()->getGeneral();
-        $isInstalled = Craft::$app->getIsInstalled();
-        $isMigrationNeeded = Craft::$app->getUpdates()->getIsCraftDbMigrationNeeded();
         $sitesService = Craft::$app->getSites();
         $locale = Craft::$app->getLocale();
         $orientation = $locale->getOrientation();
-        $userService = Craft::$app->getUser();
-        $currentUser = $userService->getIdentity();
+        $userSession = Craft::$app->getUser();
+        $currentUser = $userSession->getIdentity();
+        $primarySite = $upToDate ? $sitesService->getPrimarySite() : null;
 
         $data = [
             'actionTrigger' => $generalConfig->actionTrigger,
             'actionUrl' => UrlHelper::actionUrl(),
+            'allowUppercaseInSlug' => (bool)$generalConfig->allowUppercaseInSlug,
+            'apiParams' => Craft::$app->apiParams,
             'asciiCharMap' => StringHelper::asciiCharMap(true, Craft::$app->language),
+            'baseApiUrl' => Craft::$app->baseApiUrl,
             'baseCpUrl' => UrlHelper::cpUrl(),
             'baseSiteUrl' => UrlHelper::siteUrl(),
             'baseUrl' => UrlHelper::url(),
+            'cpTrigger' => $generalConfig->cpTrigger,
             'datepickerOptions' => $this->_datepickerOptions($locale, $currentUser, $generalConfig),
             'defaultIndexCriteria' => ['enabledForSite' => null],
-            'editableCategoryGroups' => $isInstalled ? $this->_editableCategoryGroups() : [],
+            'editableCategoryGroups' => $upToDate ? $this->_editableCategoryGroups() : [],
             'edition' => Craft::$app->getEdition(),
             'fileKinds' => Assets::getFileKinds(),
-            'forceConfirmUnload' => Craft::$app->getSession()->hasFlash('error'),
             'isImagick' => Craft::$app->getImages()->getIsImagick(),
             'isMultiSite' => Craft::$app->getIsMultiSite(),
             'language' => Craft::$app->language,
@@ -247,23 +275,28 @@ JS;
             'maxUploadSize' => Assets::getMaxUploadSize(),
             'omitScriptNameInUrls' => (bool)$generalConfig->omitScriptNameInUrls,
             'orientation' => $orientation,
+            'pageNum' => $request->getPageNum(),
+            'pageTrigger' => $generalConfig->getPageTrigger(),
             'path' => $request->getPathInfo(),
-            'primarySiteId' => $isInstalled && !$isMigrationNeeded ? (int)$sitesService->getPrimarySite()->id : null,
+            'pathParam' => $generalConfig->pathParam,
+            'primarySiteId' => $primarySite ? (int)$primarySite->id : null,
+            'primarySiteLanguage' => $primarySite->language ?? null,
             'Pro' => Craft::Pro,
-            'publishableSections' => $isInstalled && $currentUser ? $this->_publishableSections($currentUser) : [],
+            'publishableSections' => $upToDate && $currentUser ? $this->_publishableSections($currentUser) : [],
             'registeredAssetBundles' => ['' => ''], // force encode as JS object
             'registeredJsFiles' => ['' => ''], // force encode as JS object
-            'remainingSessionTime' => !in_array($request->getSegment(1), ['updates', 'manualupdate'], true) ? $userService->getRemainingSessionTime() : 0,
+            'remainingSessionTime' => !in_array($request->getSegment(1), ['updates', 'manualupdate'], true) ? $userSession->getRemainingSessionTime() : 0,
             'right' => $orientation === 'ltr' ? 'right' : 'left',
             'runQueueAutomatically' => (bool)$generalConfig->runQueueAutomatically,
             'scriptName' => $request->getScriptFile(),
-            'siteId' => $isInstalled && !$isMigrationNeeded ? (int)$sitesService->currentSite->id : null,
+            'siteId' => $upToDate ? (int)$sitesService->currentSite->id : null,
             'sites' => $this->_sites($sitesService),
             'slugWordSeparator' => $generalConfig->slugWordSeparator,
             'Solo' => Craft::Solo,
             'systemUid' => Craft::$app->getSystemUid(),
             'timepickerOptions' => $this->_timepickerOptions($locale, $orientation),
             'timezone' => Craft::$app->getTimeZone(),
+            'tokenParam' => $generalConfig->tokenParam,
             'translations' => ['' => ''], // force encode as JS object
             'useCompressedJs' => (bool)$generalConfig->useCompressedJs,
             'usePathInfo' => (bool)$generalConfig->usePathInfo,
@@ -271,8 +304,8 @@ JS;
         ];
 
         if ($generalConfig->enableCsrfProtection) {
+            $data['csrfTokenName'] = $request->csrfParam;
             $data['csrfTokenValue'] = $request->getCsrfToken();
-            $data['csrfTokenName'] = $generalConfig->csrfTokenName;
         }
 
         return $data;
@@ -303,6 +336,7 @@ JS;
                 'handle' => $group->handle,
                 'id' => (int)$group->id,
                 'name' => Craft::t('site', $group->name),
+                'uid' => Craft::t('site', $group->uid),
             ];
         }
 
@@ -314,7 +348,7 @@ JS;
         $sections = [];
 
         foreach (Craft::$app->getSections()->getEditableSections() as $section) {
-            if ($section->type !== Section::TYPE_SINGLE && $currentUser->can('createEntries:'.$section->id)) {
+            if ($section->type !== Section::TYPE_SINGLE && $currentUser->can('createEntries:' . $section->uid)) {
                 $sections[] = [
                     'entryTypes' => $this->_entryTypes($section),
                     'handle' => $section->handle,
@@ -322,6 +356,7 @@ JS;
                     'name' => Craft::t('site', $section->name),
                     'sites' => $section->getSiteIds(),
                     'type' => $section->type,
+                    'uid' => $section->uid,
                 ];
             }
         }
@@ -352,6 +387,7 @@ JS;
             $sites[] = [
                 'handle' => $site->handle,
                 'id' => (int)$site->id,
+                'uid' => (string)$site->uid,
                 'name' => Craft::t('site', $site->name),
             ];
         }

@@ -3,7 +3,6 @@
 namespace craft\volumes;
 
 use Craft;
-use craft\helpers\UrlHelper;
 
 /**
  * The temporary volume class. Handles the implementation of a temporary volume
@@ -14,7 +13,7 @@ use craft\helpers\UrlHelper;
  * @license http://craftcms.com/license Craft License Agreement
  * @see http://craftcms.com
  * @package craft.app.volumes
- * @since 3.0
+ * @since 3.0.0
  */
 class Temp extends Local
 {

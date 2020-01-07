@@ -16,7 +16,7 @@ use craft\base\Model;
  * @property bool $hasReleases Whether there are any releases available
  * @property UpdateRelease|null $latest The latest release (if any are available)
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Update extends Model
 {
@@ -54,6 +54,11 @@ class Update extends Model
      * @var UpdateRelease[] The available releases
      */
     public $releases = [];
+
+    /**
+     * @var string The package name that should be used when updating
+     */
+    public $packageName;
 
     // Public Methods
     // =========================================================================

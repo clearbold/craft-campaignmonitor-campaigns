@@ -11,6 +11,7 @@ use Craft;
 use craft\base\Widget;
 use craft\base\WidgetInterface;
 use craft\db\Query;
+use craft\db\Table;
 use craft\errors\MissingComponentException;
 use craft\errors\WidgetNotFoundException;
 use craft\events\RegisterComponentTypesEvent;
@@ -32,7 +33,7 @@ use yii\base\Exception;
  * An instance of the Dashboard service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getDashboard()|`Craft::$app->dashboard`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Dashboard extends Component
 {
@@ -224,7 +225,7 @@ class Dashboard extends Component
             if ($isNewWidget) {
                 // Set the sortOrder
                 $maxSortOrder = (new Query())
-                    ->from(['{{%widgets}}'])
+                    ->from([Table::WIDGETS])
                     ->where(['userId' => Craft::$app->getUser()->getIdentity()->id])
                     ->max('[[sortOrder]]');
 
@@ -393,7 +394,7 @@ class Dashboard extends Component
         // Update the user record
         $user->hasDashboard = true;
         Craft::$app->getDb()->createCommand()
-            ->update('{{%users}}', ['hasDashboard' => true], ['id' => $user->id])
+            ->update(Table::USERS, ['hasDashboard' => true], ['id' => $user->id])
             ->execute();
     }
 
@@ -480,6 +481,6 @@ class Dashboard extends Component
                 'type',
                 'settings',
             ])
-            ->from(['{{%widgets}}']);
+            ->from([Table::WIDGETS]);
     }
 }

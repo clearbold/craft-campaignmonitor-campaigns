@@ -18,7 +18,7 @@ use yii\db\Schema;
  * Email represents an Email field.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Email extends Field implements PreviewableFieldInterface
 {
@@ -32,6 +32,22 @@ class Email extends Field implements PreviewableFieldInterface
     {
         return Craft::t('app', 'Email');
     }
+
+    /**
+     * @inheritdoc
+     */
+    public static function valueType(): string
+    {
+        return 'string|null';
+    }
+
+    // Properties
+    // =========================================================================
+
+    /**
+     * @var string|null The input’s placeholder text
+     */
+    public $placeholder;
 
     // Public Methods
     // =========================================================================
@@ -47,12 +63,30 @@ class Email extends Field implements PreviewableFieldInterface
     /**
      * @inheritdoc
      */
+    public function getSettingsHtml()
+    {
+        return Craft::$app->getView()->renderTemplateMacro('_includes/forms', 'textField', [
+            [
+                'label' => Craft::t('app', 'Placeholder Text'),
+                'instructions' => Craft::t('app', 'The text that will be shown if the field doesn’t have a value.'),
+                'id' => 'placeholder',
+                'name' => 'placeholder',
+                'value' => $this->placeholder,
+                'errors' => $this->getErrors('placeholder'),
+            ]
+        ]);
+    }
+
+    /**
+     * @inheritdoc
+     */
     public function getInputHtml($value, ElementInterface $element = null): string
     {
         return Craft::$app->getView()->renderTemplate('_includes/forms/text', [
             'type' => 'email',
             'id' => $this->handle,
             'name' => $this->handle,
+            'placeholder' => Craft::t('site', $this->placeholder),
             'value' => $value,
         ]);
     }

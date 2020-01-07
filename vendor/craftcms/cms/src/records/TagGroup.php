@@ -8,6 +8,8 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\SoftDeleteTrait;
+use craft\db\Table;
 use yii\db\ActiveQueryInterface;
 
 /**
@@ -20,10 +22,15 @@ use yii\db\ActiveQueryInterface;
  * @property FieldLayout $fieldLayout Field layout
  * @property Tag[] $tags Tags
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class TagGroup extends ActiveRecord
 {
+    // Traits
+    // =========================================================================
+
+    use SoftDeleteTrait;
+
     // Public Methods
     // =========================================================================
 
@@ -33,7 +40,7 @@ class TagGroup extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%taggroups}}';
+        return Table::TAGGROUPS;
     }
 
     /**

@@ -17,7 +17,7 @@ use yii\base\InvalidConfigException;
  *
  * @property AssetTransform $transform
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class AssetTransformIndex extends Model
 {
@@ -107,10 +107,10 @@ class AssetTransformIndex extends Model
      */
     public function rules()
     {
-        return [
-            [['id', 'assetId', 'volumeId'], 'number', 'integerOnly' => true],
-            [['dateIndexed', 'dateUpdated', 'dateCreated'], DateTimeValidator::class],
-        ];
+        $rules = parent::rules();
+        $rules[] = [['id', 'assetId', 'volumeId'], 'number', 'integerOnly' => true];
+        $rules[] = [['dateIndexed', 'dateUpdated', 'dateCreated'], DateTimeValidator::class];
+        return $rules;
     }
 
     /**
@@ -136,7 +136,7 @@ class AssetTransformIndex extends Model
         }
 
         if (($this->_transform = Craft::$app->getAssetTransforms()->normalizeTransform(mb_substr($this->location, 1))) === null) {
-            throw new InvalidConfigException('Invalid transform location: '.$this->location);
+            throw new InvalidConfigException('Invalid transform location: ' . $this->location);
         }
 
         return $this->_transform;

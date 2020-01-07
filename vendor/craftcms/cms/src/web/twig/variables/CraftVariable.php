@@ -8,6 +8,7 @@
 namespace craft\web\twig\variables;
 
 use Craft;
+use craft\db\Query;
 use craft\elements\Asset;
 use craft\elements\Category;
 use craft\elements\db\AssetQuery;
@@ -23,7 +24,6 @@ use craft\elements\MatrixBlock;
 use craft\elements\Tag;
 use craft\elements\User;
 use craft\events\DefineBehaviorsEvent;
-use craft\events\DefineComponentsEvent;
 use yii\di\ServiceLocator;
 
 /**
@@ -47,10 +47,9 @@ use yii\di\ServiceLocator;
  * @property UserGroups $userGroups
  * @property UserPermissions $userPermissions
  * @property EmailMessages $emailMessages
- * @property EntryRevisions $entryRevisions
  * @property Rebrand $rebrand
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class CraftVariable extends ServiceLocator
 {
@@ -72,7 +71,7 @@ class CraftVariable extends ServiceLocator
     /**
      * @event DefineComponentsEvent The event that is triggered when defining the Service Locator components.
      * @see __construct()
-     * @deprecated since 3.0.0-beta.23
+     * @deprecated in 3.0.0-beta.23
      */
     const EVENT_DEFINE_COMPONENTS = 'defineComponents';
 
@@ -104,7 +103,6 @@ class CraftVariable extends ServiceLocator
             'config' => Config::class,
             'deprecator' => Deprecator::class,
             'elementIndexes' => ElementIndexes::class,
-            'entryRevisions' => EntryRevisions::class,
             'feeds' => Feeds::class,
             'fields' => Fields::class,
             'globals' => Globals::class,
@@ -128,17 +126,6 @@ class CraftVariable extends ServiceLocator
                 'userPermissions' => UserPermissions::class,
             ]);
         }
-
-        // todo: remove all this before 3.0 GA
-        // Let plugins add their own components
-        $event = new DefineComponentsEvent([
-            'components' => $components,
-        ]);
-        if ($this->hasEventHandlers(self::EVENT_DEFINE_COMPONENTS)) {
-            Craft::$app->getDeprecator()->log('CraftVariable::defineComponents', 'The `defineComponents` event on CraftVariable has been deprecated. Use the `init` event to register custom components instead.');
-            $this->trigger(self::EVENT_DEFINE_COMPONENTS, $event);
-        }
-        $components = $event->components;
 
         $config['components'] = $components;
 
@@ -204,7 +191,7 @@ class CraftVariable extends ServiceLocator
      * Gets the current language in use.
      *
      * @return string
-     * @deprecated in 3.0
+     * @deprecated in 3.0.0
      */
     public function locale(): string
     {
@@ -216,7 +203,7 @@ class CraftVariable extends ServiceLocator
      * Returns whether this site has multiple locales.
      *
      * @return bool
-     * @deprecated in 3.0. Use craft.app.isMultiSite instead
+     * @deprecated in 3.0.0. Use craft.app.isMultiSite instead
      */
     public function isLocalized(): bool
     {
@@ -224,11 +211,11 @@ class CraftVariable extends ServiceLocator
         return Craft::$app->getIsMultiSite();
     }
 
-    // Element queries
+    // Queries
     // -------------------------------------------------------------------------
 
     /**
-     * Returns a new AssetQuery instance.
+     * Returns a new [asset query](https://docs.craftcms.com/v3/dev/element-queries/asset-queries.html).
      *
      * @param array $criteria
      * @return AssetQuery
@@ -241,7 +228,7 @@ class CraftVariable extends ServiceLocator
     }
 
     /**
-     * Returns a new CategoryQuery instance.
+     * Returns a new [category query](https://docs.craftcms.com/v3/dev/element-queries/category-queries.html).
      *
      * @param array $criteria
      * @return CategoryQuery
@@ -254,7 +241,7 @@ class CraftVariable extends ServiceLocator
     }
 
     /**
-     * Returns a new EntryQuery instance.
+     * Returns a new [entry query](https://docs.craftcms.com/v3/dev/element-queries/entry-queries.html).
      *
      * @param array $criteria
      * @return EntryQuery
@@ -267,10 +254,11 @@ class CraftVariable extends ServiceLocator
     }
 
     /**
-     * Returns a new GlobalSetQuery instance.
+     * Returns a new [global set query](https://docs.craftcms.com/v3/dev/element-queries/global-set-queries.html).
      *
      * @param array $criteria
      * @return GlobalSetQuery
+     * @since 3.0.4
      */
     public function globalSets(array $criteria = []): GlobalSetQuery
     {
@@ -280,7 +268,7 @@ class CraftVariable extends ServiceLocator
     }
 
     /**
-     * Returns a new MatrixBlockQuery instance.
+     * Returns a new [Matrix block query](https://docs.craftcms.com/v3/dev/element-queries/matrix-block-queries.html).
      *
      * @param array $criteria
      * @return MatrixBlockQuery
@@ -293,7 +281,18 @@ class CraftVariable extends ServiceLocator
     }
 
     /**
-     * Returns a new TagQuery instance.
+     * Returns a new generic query.
+     *
+     * @return Query
+     * @since 3.0.19
+     */
+    public function query(): Query
+    {
+        return new Query();
+    }
+
+    /**
+     * Returns a new [tag query](https://docs.craftcms.com/v3/dev/element-queries/tag-queries.html).
      *
      * @param array $criteria
      * @return TagQuery
@@ -306,7 +305,7 @@ class CraftVariable extends ServiceLocator
     }
 
     /**
-     * Returns a new UserQuery instance
+     * Returns a new [user query](https://docs.craftcms.com/v3/dev/element-queries/user-queries.html).
      *
      * @param array $criteria
      * @return UserQuery

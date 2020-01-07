@@ -9,13 +9,22 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
     public static $files = array (
         '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
         '320cde22f66dd4f5d3fd621d3e88b98f' => __DIR__ . '/..' . '/symfony/polyfill-ctype/bootstrap.php',
+        '0d59ee240a4cd96ddbb4ff164fccea4d' => __DIR__ . '/..' . '/symfony/polyfill-php73/bootstrap.php',
         '2cffec82183ee1cea088009cef9a6fc3' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier.composer.php',
+        '25072dd6e2470089de65ae7bf11d3109' => __DIR__ . '/..' . '/symfony/polyfill-php72/bootstrap.php',
+        'def43f6c87e4f8dfd0c9e1b1bab14fe8' => __DIR__ . '/..' . '/symfony/polyfill-iconv/bootstrap.php',
+        '8825ede83f2f289127722d4e842cf7e8' => __DIR__ . '/..' . '/symfony/polyfill-intl-grapheme/bootstrap.php',
+        'f598d06aa772fa33d905e87be6398fb1' => __DIR__ . '/..' . '/symfony/polyfill-intl-idn/bootstrap.php',
+        'e69f7f6ee287b969198c3c9d6777bd38' => __DIR__ . '/..' . '/symfony/polyfill-intl-normalizer/bootstrap.php',
+        'b46ad4fe52f4d1899a2951c7e6ea56b0' => __DIR__ . '/..' . '/voku/portable-utf8/bootstrap.php',
+        '7b11c4dc42b3b3023073cb14e519683c' => __DIR__ . '/..' . '/ralouphie/getallheaders/src/getallheaders.php',
         'c964ee0ededf28c96ebd9db5099ef910' => __DIR__ . '/..' . '/guzzlehttp/promises/src/functions_include.php',
         'a0edc8309cc5e1d60e3047b5df6b7052' => __DIR__ . '/..' . '/guzzlehttp/psr7/src/functions_include.php',
-        '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
-        '5255c38a0faeba867671b61dfda6d864' => __DIR__ . '/..' . '/paragonie/random_compat/lib/random.php',
         '2c102faa651ef8ea5874edb585946bce' => __DIR__ . '/..' . '/swiftmailer/swiftmailer/lib/swift_required.php',
-        '65fec9ebcfbb3cbb4fd0d519687aea01' => __DIR__ . '/..' . '/danielstjules/stringy/src/Create.php',
+        '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
+        '538ca81a9a966a6716601ecf48f4eaef' => __DIR__ . '/..' . '/opis/closure/functions.php',
+        '65380ab4d81167209b0a4fac46641984' => __DIR__ . '/..' . '/voku/arrayy/src/Create.php',
+        'c88a6f0dbb89a32bf4e283d3a7d626ab' => __DIR__ . '/..' . '/voku/stringy/src/Create.php',
     );
 
     public static $prefixLengthsPsr4 = array (
@@ -23,6 +32,7 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             'yii\\swiftmailer\\' => 16,
             'yii\\queue\\sync\\' => 15,
+            'yii\\queue\\sqs\\' => 14,
             'yii\\queue\\redis\\' => 16,
             'yii\\queue\\gearman\\' => 18,
             'yii\\queue\\file\\' => 15,
@@ -33,8 +43,18 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
             'yii\\queue\\' => 10,
             'yii\\debug\\' => 10,
             'yii\\composer\\' => 13,
-            'yii\\bootstrap\\' => 14,
             'yii\\' => 4,
+            'yii2tech\\ar\\softdelete\\' => 23,
+        ),
+        'v' => 
+        array (
+            'voku\\tests\\' => 11,
+            'voku\\helper\\' => 12,
+            'voku\\' => 5,
+        ),
+        'p' => 
+        array (
+            'phpDocumentor\\Reflection\\' => 25,
         ),
         'm' => 
         array (
@@ -47,11 +67,13 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         'c' => 
         array (
             'creocoder\\nestedsets\\' => 21,
+            'crafttests\\fixtures\\' => 20,
             'craftcms\\oauth2\\client\\' => 23,
             'craft\\composer\\' => 15,
             'craft\\' => 6,
-            'clearbold\\cmsynch\\' => 18,
             'clearbold\\cmservice\\' => 20,
+            'clearbold\\cmlists\\' => 18,
+            'clearbold\\cmcampaigns\\' => 22,
             'cebe\\markdown\\' => 14,
         ),
         'Z' => 
@@ -60,14 +82,27 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
             'Zend\\Feed\\' => 10,
             'Zend\\Escaper\\' => 13,
         ),
+        'W' => 
+        array (
+            'Webmozart\\Assert\\' => 17,
+        ),
         'T' => 
         array (
             'Twig\\' => 5,
+            'TrueBV\\' => 7,
         ),
         'S' => 
         array (
+            'Symfony\\Polyfill\\Php73\\' => 23,
+            'Symfony\\Polyfill\\Php72\\' => 23,
             'Symfony\\Polyfill\\Mbstring\\' => 26,
+            'Symfony\\Polyfill\\Intl\\Normalizer\\' => 33,
+            'Symfony\\Polyfill\\Intl\\Idn\\' => 26,
+            'Symfony\\Polyfill\\Intl\\Grapheme\\' => 31,
+            'Symfony\\Polyfill\\Iconv\\' => 23,
             'Symfony\\Polyfill\\Ctype\\' => 23,
+            'Symfony\\Contracts\\Service\\' => 26,
+            'Symfony\\Component\\Yaml\\' => 23,
             'Symfony\\Component\\Process\\' => 26,
             'Symfony\\Component\\Finder\\' => 25,
             'Symfony\\Component\\Filesystem\\' => 29,
@@ -81,6 +116,11 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             'Psr\\Log\\' => 8,
             'Psr\\Http\\Message\\' => 17,
+            'Psr\\Container\\' => 14,
+        ),
+        'O' => 
+        array (
+            'Opis\\Closure\\' => 13,
         ),
         'L' => 
         array (
@@ -92,15 +132,24 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             'JsonSchema\\' => 11,
         ),
+        'I' => 
+        array (
+            'Imagine\\' => 8,
+        ),
         'G' => 
         array (
             'GuzzleHttp\\Psr7\\' => 16,
             'GuzzleHttp\\Promise\\' => 19,
             'GuzzleHttp\\' => 11,
+            'GraphQL\\' => 8,
         ),
         'E' => 
         array (
             'Egulias\\EmailValidator\\' => 23,
+        ),
+        'D' => 
+        array (
+            'Doctrine\\Common\\Lexer\\' => 22,
         ),
         'C' => 
         array (
@@ -108,6 +157,10 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
             'Composer\\Semver\\' => 16,
             'Composer\\CaBundle\\' => 18,
             'Composer\\' => 9,
+        ),
+        'A' => 
+        array (
+            'Arrayy\\' => 7,
         ),
     );
 
@@ -119,6 +172,10 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         'yii\\queue\\sync\\' => 
         array (
             0 => __DIR__ . '/..' . '/yiisoft/yii2-queue/src/drivers/sync',
+        ),
+        'yii\\queue\\sqs\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/yiisoft/yii2-queue/src/drivers/sqs',
         ),
         'yii\\queue\\redis\\' => 
         array (
@@ -154,19 +211,42 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         ),
         'yii\\debug\\' => 
         array (
-            0 => __DIR__ . '/..' . '/yiisoft/yii2-debug',
+            0 => __DIR__ . '/..' . '/yiisoft/yii2-debug/src',
         ),
         'yii\\composer\\' => 
         array (
             0 => __DIR__ . '/..' . '/yiisoft/yii2-composer',
         ),
-        'yii\\bootstrap\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/yiisoft/yii2-bootstrap/src',
-        ),
         'yii\\' => 
         array (
             0 => __DIR__ . '/..' . '/yiisoft/yii2',
+        ),
+        'yii2tech\\ar\\softdelete\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/yii2tech/ar-softdelete/src',
+        ),
+        'voku\\tests\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/voku/portable-ascii/tests',
+            1 => __DIR__ . '/..' . '/voku/portable-utf8/tests',
+        ),
+        'voku\\helper\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/voku/anti-xss/src/voku/helper',
+            1 => __DIR__ . '/..' . '/voku/email-check/src/voku/helper',
+            2 => __DIR__ . '/..' . '/voku/urlify/src/voku/helper',
+        ),
+        'voku\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/voku/portable-ascii/src/voku',
+            1 => __DIR__ . '/..' . '/voku/portable-utf8/src/voku',
+            2 => __DIR__ . '/..' . '/voku/stop-words/src/voku',
+        ),
+        'phpDocumentor\\Reflection\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/phpdocumentor/reflection-common/src',
+            1 => __DIR__ . '/..' . '/phpdocumentor/reflection-docblock/src',
+            2 => __DIR__ . '/..' . '/phpdocumentor/type-resolver/src',
         ),
         'mikehaertl\\shellcommand\\' => 
         array (
@@ -180,6 +260,10 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/creocoder/yii2-nested-sets/src',
         ),
+        'crafttests\\fixtures\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/craftcms/cms/tests/fixtures',
+        ),
         'craftcms\\oauth2\\client\\' => 
         array (
             0 => __DIR__ . '/..' . '/craftcms/oauth2-craftid/src',
@@ -192,13 +276,17 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/craftcms/cms/src',
         ),
-        'clearbold\\cmsynch\\' => 
-        array (
-            0 => __DIR__ . '/../..' . '/src',
-        ),
         'clearbold\\cmservice\\' => 
         array (
             0 => __DIR__ . '/..' . '/clearbold/craft-campaignmonitor-service/src',
+        ),
+        'clearbold\\cmlists\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/clearbold/craft-campaignmonitor-lists/src',
+        ),
+        'clearbold\\cmcampaigns\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/src',
         ),
         'cebe\\markdown\\' => 
         array (
@@ -216,17 +304,57 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/zendframework/zend-escaper/src',
         ),
+        'Webmozart\\Assert\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/webmozart/assert/src',
+        ),
         'Twig\\' => 
         array (
             0 => __DIR__ . '/..' . '/twig/twig/src',
+        ),
+        'TrueBV\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/true/punycode/src',
+        ),
+        'Symfony\\Polyfill\\Php73\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-php73',
+        ),
+        'Symfony\\Polyfill\\Php72\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-php72',
         ),
         'Symfony\\Polyfill\\Mbstring\\' => 
         array (
             0 => __DIR__ . '/..' . '/symfony/polyfill-mbstring',
         ),
+        'Symfony\\Polyfill\\Intl\\Normalizer\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-intl-normalizer',
+        ),
+        'Symfony\\Polyfill\\Intl\\Idn\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-intl-idn',
+        ),
+        'Symfony\\Polyfill\\Intl\\Grapheme\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-intl-grapheme',
+        ),
+        'Symfony\\Polyfill\\Iconv\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-iconv',
+        ),
         'Symfony\\Polyfill\\Ctype\\' => 
         array (
             0 => __DIR__ . '/..' . '/symfony/polyfill-ctype',
+        ),
+        'Symfony\\Contracts\\Service\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/service-contracts',
+        ),
+        'Symfony\\Component\\Yaml\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/yaml',
         ),
         'Symfony\\Component\\Process\\' => 
         array (
@@ -246,7 +374,7 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         ),
         'Stringy\\' => 
         array (
-            0 => __DIR__ . '/..' . '/danielstjules/stringy/src',
+            0 => __DIR__ . '/..' . '/voku/stringy/src',
         ),
         'Seld\\PharUtils\\' => 
         array (
@@ -268,6 +396,14 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/psr/http-message/src',
         ),
+        'Psr\\Container\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/psr/container/src',
+        ),
+        'Opis\\Closure\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/opis/closure/src',
+        ),
         'LitEmoji\\' => 
         array (
             0 => __DIR__ . '/..' . '/elvanto/litemoji/src',
@@ -284,6 +420,10 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema',
         ),
+        'Imagine\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/pixelandtonic/imagine/src',
+        ),
         'GuzzleHttp\\Psr7\\' => 
         array (
             0 => __DIR__ . '/..' . '/guzzlehttp/psr7/src',
@@ -296,9 +436,17 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/guzzlehttp/guzzle/src',
         ),
+        'GraphQL\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/webonyx/graphql-php/src',
+        ),
         'Egulias\\EmailValidator\\' => 
         array (
             0 => __DIR__ . '/..' . '/egulias/email-validator/EmailValidator',
+        ),
+        'Doctrine\\Common\\Lexer\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/doctrine/lexer/lib/Doctrine/Common/Lexer',
         ),
         'Composer\\Spdx\\' => 
         array (
@@ -316,6 +464,10 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         array (
             0 => __DIR__ . '/..' . '/composer/composer/src/Composer',
         ),
+        'Arrayy\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/voku/arrayy/src',
+        ),
     );
 
     public static $prefixesPsr0 = array (
@@ -326,25 +478,11 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
                 0 => __DIR__ . '/..' . '/twig/twig/lib',
             ),
         ),
-        'I' => 
-        array (
-            'Imagine' => 
-            array (
-                0 => __DIR__ . '/..' . '/pixelandtonic/imagine/lib',
-            ),
-        ),
         'H' => 
         array (
             'HTMLPurifier' => 
             array (
                 0 => __DIR__ . '/..' . '/ezyang/htmlpurifier/library',
-            ),
-        ),
-        'D' => 
-        array (
-            'Doctrine\\Common\\Lexer\\' => 
-            array (
-                0 => __DIR__ . '/..' . '/doctrine/lexer/lib',
             ),
         ),
     );
@@ -363,6 +501,8 @@ class ComposerStaticInit6a5d8b6b96d94a95beaad9524ff9be3b
         'CS_REST_Transactional_ClassicEmail' => __DIR__ . '/..' . '/campaignmonitor/createsend-php/csrest_transactional_classicemail.php',
         'CS_REST_Transactional_SmartEmail' => __DIR__ . '/..' . '/campaignmonitor/createsend-php/csrest_transactional_smartemail.php',
         'CS_REST_Transactional_Timeline' => __DIR__ . '/..' . '/campaignmonitor/createsend-php/csrest_transactional_timeline.php',
+        'JsonException' => __DIR__ . '/..' . '/symfony/polyfill-php73/Resources/stubs/JsonException.php',
+        'Normalizer' => __DIR__ . '/..' . '/symfony/polyfill-intl-normalizer/Resources/stubs/Normalizer.php',
         'RequirementsChecker' => __DIR__ . '/..' . '/craftcms/server-check/server/requirements/RequirementsChecker.php',
     );
 

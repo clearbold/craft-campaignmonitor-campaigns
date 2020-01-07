@@ -8,6 +8,7 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\Table;
 use craft\validators\DateTimeValidator;
 use yii\db\ActiveQueryInterface;
 
@@ -20,7 +21,7 @@ use yii\db\ActiveQueryInterface;
  * @property \DateTime $applyTime Apply time
  * @property Plugin $plugin Plugin
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Migration extends ActiveRecord
 {
@@ -46,7 +47,7 @@ class Migration extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%migrations}}';
+        return Table::MIGRATIONS;
     }
 
     /**

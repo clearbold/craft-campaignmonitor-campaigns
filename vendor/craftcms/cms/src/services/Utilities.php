@@ -17,7 +17,7 @@ use craft\utilities\DeprecationErrors;
 use craft\utilities\FindAndReplace;
 use craft\utilities\Migrations;
 use craft\utilities\PhpInfo;
-use craft\utilities\SearchIndexes;
+use craft\utilities\SystemMessages as SystemMessagesUtility;
 use craft\utilities\SystemReport;
 use craft\utilities\Updates as UpdatesUtility;
 use yii\base\Component;
@@ -27,7 +27,7 @@ use yii\base\Component;
  * An instance of the Utilities service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getUtilities()|`Craft::$app->utilities()`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Utilities extends Component
 {
@@ -70,8 +70,11 @@ class Utilities extends Component
             UpdatesUtility::class,
             SystemReport::class,
             PhpInfo::class,
-            SearchIndexes::class,
         ];
+
+        if (Craft::$app->getEdition() === Craft::Pro) {
+            $utilityTypes[] = SystemMessagesUtility::class;
+        }
 
         if (!empty(Craft::$app->getVolumes()->getAllVolumes())) {
             $utilityTypes[] = AssetIndexes::class;
@@ -118,7 +121,7 @@ class Utilities extends Component
     public function checkAuthorization(string $class): bool
     {
         /** @var string|UtilityInterface $class */
-        return Craft::$app->getUser()->checkPermission('utility:'.$class::id());
+        return Craft::$app->getUser()->checkPermission('utility:' . $class::id());
     }
 
     /**

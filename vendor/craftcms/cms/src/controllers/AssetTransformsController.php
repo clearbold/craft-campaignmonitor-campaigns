@@ -21,7 +21,7 @@ use yii\web\Response;
  * Note that all actions in the controller require an authenticated Craft session via [[allowAnonymous]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class AssetTransformsController extends Controller
 {
@@ -35,6 +35,8 @@ class AssetTransformsController extends Controller
     {
         // All asset transform actions require an admin
         $this->requireAdmin();
+
+        parent::init();
     }
 
     /**
@@ -76,9 +78,16 @@ class AssetTransformsController extends Controller
 
         $this->getView()->registerAssetBundle(EditTransformAsset::class);
 
+        if ($transform->id) {
+            $title = trim($transform->name) ?: Craft::t('app', 'Edit Image Transform');
+        } else {
+            $title = Craft::t('app', 'Create a new image transform');
+        }
+
         return $this->renderTemplate('settings/assets/transforms/_settings', [
             'handle' => $transformHandle,
-            'transform' => $transform
+            'transform' => $transform,
+            'title' => $title,
         ]);
     }
 
@@ -163,7 +172,7 @@ class AssetTransformsController extends Controller
 
         $transformId = Craft::$app->getRequest()->getRequiredBodyParam('id');
 
-        Craft::$app->getAssetTransforms()->deleteTransform($transformId);
+        Craft::$app->getAssetTransforms()->deleteTransformById($transformId);
 
         return $this->asJson(['success' => true]);
     }

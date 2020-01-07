@@ -3,8 +3,8 @@
 return [
     'id' => 'CraftCMS',
     'name' => 'Craft CMS',
-    'version' => '3.0.10.3',
-    'schemaVersion' => '3.0.91',
+    'version' => '3.3.19',
+    'schemaVersion' => '3.3.3',
     'minVersionRequired' => '2.6.2788',
     'basePath' => dirname(__DIR__), // Defines the @app alias
     'runtimePath' => '@storage/runtime', // Defines the @runtime alias
@@ -38,6 +38,9 @@ return [
         'deprecator' => [
             'class' => craft\services\Deprecator::class,
         ],
+        'drafts' => [
+            'class' => craft\services\Drafts::class,
+        ],
         'elementIndexes' => [
             'class' => craft\services\ElementIndexes::class,
         ],
@@ -56,8 +59,14 @@ return [
         'fields' => [
             'class' => craft\services\Fields::class,
         ],
+        'gc' => [
+            'class' => craft\services\Gc::class,
+        ],
         'globals' => [
             'class' => craft\services\Globals::class,
+        ],
+        'gql' => [
+            'class' => craft\services\Gql::class,
         ],
         'images' => [
             'class' => craft\services\Images::class,
@@ -80,6 +89,9 @@ return [
         'relations' => [
             'class' => craft\services\Relations::class,
         ],
+        'revisions' => [
+            'class' => craft\services\Revisions::class,
+        ],
         'routes' => [
             'class' => craft\services\Routes::class,
         ],
@@ -91,6 +103,15 @@ return [
         ],
         'security' => [
             'class' => craft\services\Security::class,
+            'sensitiveKeywords' => [
+                'key',
+                'pass',
+                'password',
+                'pw',
+                'secret',
+                'tok',
+                'token',
+            ],
         ],
         'structures' => [
             'class' => craft\services\Structures::class,
@@ -143,18 +164,12 @@ return [
         ],
         'systemSettings' => [
             'class' => craft\services\SystemSettings::class,
-            'defaults' => [
-                'users' => [
-                    'requireEmailVerification' => true,
-                    'allowPublicRegistration' => false,
-                    'defaultGroup' => null,
-                    'photoVolumeId' => null,
-                    'photoSubpath' => ''
-                ],
-            ]
         ],
         'i18n' => [
             'class' => craft\i18n\I18N::class,
+            'messageFormatter' => [
+                'class' => craft\i18n\MessageFormatter::class,
+            ],
             'translations' => [
                 'yii' => [
                     'class' => craft\i18n\PhpMessageSource::class,
@@ -183,43 +198,12 @@ return [
         // -------------------------------------------------------------------------
 
         'cache' => function() {
-            $generalConfig = Craft::$app->getConfig()->getGeneral();
-
-            $config = [
-                'class' => \yii\caching\FileCache::class,
-                'cachePath' => Craft::$app->getPath()->getCachePath(),
-                'fileMode' => $generalConfig->defaultFileMode,
-                'dirMode' => $generalConfig->defaultDirMode,
-                'defaultDuration' => $generalConfig->cacheDuration,
-            ];
-
+            $config = craft\helpers\App::cacheConfig();
             return Craft::createObject($config);
         },
 
         'db' => function() {
-            $dbConfig = Craft::$app->getConfig()->getDb();
-            return craft\db\Connection::createFromConfig($dbConfig);
-        },
-
-        'mailer' => function() {
-            $settings = Craft::$app->getSystemSettings()->getEmailSettings();
-
-            return craft\helpers\MailerHelper::createMailer($settings);
-        },
-
-        'locale' => function() {
-            return Craft::$app->getI18n()->getLocaleById(Craft::$app->language);
-        },
-
-        'mutex' => function() {
-            $generalConfig = Craft::$app->getConfig()->getGeneral();
-
-            $config = [
-                'class' => craft\mutex\FileMutex::class,
-                'fileMode' => $generalConfig->defaultFileMode,
-                'dirMode' => $generalConfig->defaultDirMode,
-            ];
-
+            $config = craft\helpers\App::dbConfig();
             return Craft::createObject($config);
         },
 
@@ -227,52 +211,32 @@ return [
             return Craft::$app->getLocale()->getFormatter();
         },
 
+        'locale' => function() {
+            return Craft::$app->getI18n()->getLocaleById(Craft::$app->language);
+        },
+
         'log' => function() {
-            // Only log console requests and web requests that aren't getAuthTimeout requests
-            $isConsoleRequest = Craft::$app->getRequest()->getIsConsoleRequest();
-            if (!$isConsoleRequest && !Craft::$app->getUser()->enableSession) {
-                return null;
-            }
+            $config = craft\helpers\App::logConfig();
+            return $config ? Craft::createObject($config) : null;
+        },
 
-            $generalConfig = Craft::$app->getConfig()->getGeneral();
+        'mailer' => function() {
+            $config = craft\helpers\App::mailerConfig();
+            return Craft::createObject($config);
+        },
 
-            $target = [
-                'class' => craft\log\FileTarget::class,
-                'fileMode' => $generalConfig->defaultFileMode,
-                'dirMode' => $generalConfig->defaultDirMode,
-            ];
+        'mutex' => function() {
+            $config = craft\helpers\App::mutexConfig();
+            return Craft::createObject($config);
+        },
 
-            if ($isConsoleRequest) {
-                $target['logFile'] = '@storage/logs/console.log';
-            } else {
-                $target['logFile'] = '@storage/logs/web.log';
-
-                // Only log errors and warnings, unless Craft is running in Dev Mode or it's being installed/updated
-                if (!YII_DEBUG && Craft::$app->getIsInstalled() && !Craft::$app->getUpdates()->getIsCraftDbMigrationNeeded()) {
-                    $target['levels'] = yii\log\Logger::LEVEL_ERROR | yii\log\Logger::LEVEL_WARNING;
-                }
-            }
-
-            return Craft::createObject([
-                'class' => yii\log\Dispatcher::class,
-                'targets' => [
-                    $target,
-                ]
-            ]);
+        'projectConfig' => function() {
+            $config = craft\helpers\App::projectConfigConfig();
+            return Craft::createObject($config);
         },
 
         'view' => function() {
-            $config = [
-                'class' => craft\web\View::class,
-            ];
-
-            $request = Craft::$app->getRequest();
-            if ($request->getIsCpRequest()) {
-                $headers = $request->getHeaders();
-                $config['registeredAssetBundles'] = explode(',', $headers->get('X-Registered-Asset-Bundles', ''));
-                $config['registeredJsFiles'] = explode(',', $headers->get('X-Registered-Js-Files', ''));
-            }
-
+            $config = craft\helpers\App::viewConfig();
             return Craft::createObject($config);
         },
     ],

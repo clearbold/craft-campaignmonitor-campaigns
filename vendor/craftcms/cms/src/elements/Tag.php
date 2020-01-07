@@ -9,6 +9,7 @@ namespace craft\elements;
 
 use Craft;
 use craft\base\Element;
+use craft\db\Table;
 use craft\elements\db\ElementQueryInterface;
 use craft\elements\db\TagQuery;
 use craft\models\TagGroup;
@@ -21,7 +22,7 @@ use yii\base\InvalidConfigException;
  *
  * @property TagGroup $group the tag's group
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Tag extends Element
 {
@@ -34,6 +35,30 @@ class Tag extends Element
     public static function displayName(): string
     {
         return Craft::t('app', 'Tag');
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public static function lowerDisplayName(): string
+    {
+        return Craft::t('app', 'tag');
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public static function pluralDisplayName(): string
+    {
+        return Craft::t('app', 'Tags');
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public static function pluralLowerDisplayName(): string
+    {
+        return Craft::t('app', 'tags');
     }
 
     /**
@@ -94,13 +119,33 @@ class Tag extends Element
 
         foreach (Craft::$app->getTags()->getAllTagGroups() as $tagGroup) {
             $sources[] = [
-                'key' => 'taggroup:'.$tagGroup->id,
+                'key' => 'taggroup:' . $tagGroup->uid,
                 'label' => Craft::t('site', $tagGroup->name),
                 'criteria' => ['groupId' => $tagGroup->id]
             ];
         }
 
         return $sources;
+    }
+
+    /**
+     * @inheritdoc
+     * @since 3.3.0
+     */
+    public static function gqlTypeNameByContext($context): string
+    {
+        /** @var TagGroup $context */
+        return $context->handle . '_Tag';
+    }
+
+    /**
+     * @inheritdoc
+     * @since 3.3.0
+     */
+    public static function gqlScopesByContext($context): array
+    {
+        /** @var TagGroup $context */
+        return ['taggroups.' . $context->uid];
     }
 
     // Properties
@@ -110,6 +155,12 @@ class Tag extends Element
      * @var int|null Group ID
      */
     public $groupId;
+
+    /**
+     * @var bool Whether the tag was deleted along with its group
+     * @see beforeDelete()
+     */
+    public $deletedWithGroup = false;
 
     // Public Methods
     // =========================================================================
@@ -131,7 +182,6 @@ class Tag extends Element
     {
         $rules = parent::rules();
         $rules[] = [['groupId'], 'number', 'integerOnly' => true];
-
         return $rules;
     }
 
@@ -164,10 +214,19 @@ class Tag extends Element
         }
 
         if (($group = Craft::$app->getTags()->getTagGroupById($this->groupId)) === null) {
-            throw new InvalidConfigException('Invalid tag group ID: '.$this->groupId);
+            throw new InvalidConfigException('Invalid tag group ID: ' . $this->groupId);
         }
 
         return $group;
+    }
+
+    /**
+     * @inheritdoc
+     * @since 3.3.0
+     */
+    public function getGqlTypeName(): string
+    {
+        return static::gqlTypeNameByContext($this->getGroup());
     }
 
     // Indexes, etc.
@@ -206,21 +265,42 @@ class Tag extends Element
      */
     public function afterSave(bool $isNew)
     {
-        // Get the tag record
-        if (!$isNew) {
-            $record = TagRecord::findOne($this->id);
+        if (!$this->propagating) {
+            // Get the tag record
+            if (!$isNew) {
+                $record = TagRecord::findOne($this->id);
 
-            if (!$record) {
-                throw new Exception('Invalid tag ID: '.$this->id);
+                if (!$record) {
+                    throw new Exception('Invalid tag ID: ' . $this->id);
+                }
+            } else {
+                $record = new TagRecord();
+                $record->id = (int)$this->id;
             }
-        } else {
-            $record = new TagRecord();
-            $record->id = $this->id;
+
+            $record->groupId = (int)$this->groupId;
+            $record->save(false);
         }
 
-        $record->groupId = $this->groupId;
-        $record->save(false);
-
         parent::afterSave($isNew);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function beforeDelete(): bool
+    {
+        if (!parent::beforeDelete()) {
+            return false;
+        }
+
+        // Update the tag record
+        Craft::$app->getDb()->createCommand()
+            ->update(Table::TAGS, [
+                'deletedWithGroup' => $this->deletedWithGroup,
+            ], ['id' => $this->id], [], false)
+            ->execute();
+
+        return true;
     }
 }

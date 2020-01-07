@@ -11,7 +11,7 @@ namespace craft\base;
  * FieldTrait implements the common methods and properties for field classes.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 trait FieldTrait
 {
@@ -44,6 +44,11 @@ trait FieldTrait
     public $instructions;
 
     /**
+     * @var bool Whether the field's values should be registered as search keywords on the elements.
+     */
+    public $searchable = true;
+
+    /**
      * @var string The field’s translation method
      */
     public $translationMethod = Field::TRANSLATION_METHOD_NONE;
@@ -59,9 +64,20 @@ trait FieldTrait
     public $oldHandle;
 
     /**
+     * @var array|null The field’s previous settings
+     * @since 3.1.2
+     */
+    public $oldSettings;
+
+    /**
      * @var string|null The field’s content column prefix
      */
     public $columnPrefix;
+
+    /**
+     * @var string|null The field's UID
+     */
+    public $uid;
 
     // These properties are only populated if the field was fetched via a Field Layout
     // -------------------------------------------------------------------------

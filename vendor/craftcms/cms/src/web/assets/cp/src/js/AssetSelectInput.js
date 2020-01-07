@@ -55,7 +55,7 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
          * Handle element being focused
          * @private
          */
-        _onElementFocus: function (ev) {
+        _onElementFocus: function(ev) {
             var $element = $(ev.item);
 
             if (Craft.PreviewFileModal.openInstance && $element.length) {
@@ -82,10 +82,11 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
          * Create the element editor
          */
         createElementEditor: function($element) {
-            return Craft.createElementEditor(this.settings.elementType, $element, {
+            return this.base($element, {
                 params: {
                     defaultFieldLayoutId: this.settings.defaultFieldLayoutId
-                }
+                },
+                input: this
             });
         },
 
@@ -122,6 +123,24 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
             options.events.fileuploaddone = $.proxy(this, '_onUploadComplete');
 
             this.uploader = new Craft.Uploader(this.$container, options);
+        },
+
+        refreshThumbnail: function(elementId) {
+            var parameters = {
+                elementId: elementId,
+                siteId: this.settings.criteria.siteId,
+                size: this.settings.viewMode
+            };
+
+            Craft.postActionRequest('elements/get-element-html', parameters, function(data) {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    var $existing = this.$elements.filter('[data-id="' + elementId + '"]');
+                    $existing.find('.elementthumb').replaceWith($(data.html).find('.elementthumb'));
+                    this.thumbLoader.load($existing);
+                }
+            }.bind(this));
         },
 
         /**
@@ -183,9 +202,13 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
             if (data.result.error) {
                 alert(data.result.error);
             } else {
-                var elementId = data.result.assetId;
+                var parameters = {
+                    elementId: data.result.assetId,
+                    siteId: this.settings.criteria.siteId,
+                    size: this.settings.viewMode
+                };
 
-                Craft.postActionRequest('elements/get-element-html', {elementId: elementId, siteId: this.settings.criteria.siteId}, function (data) {
+                Craft.postActionRequest('elements/get-element-html', parameters, function(data) {
                     if (data.error) {
                         alert(data.error);
                     } else {
@@ -198,6 +221,10 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
                     if (this.uploader.isLastUpload()) {
                         this.progressBar.hideProgressBar();
                         this.$container.removeClass('uploading');
+
+                        if (window.draftEditor) {
+                            window.draftEditor.checkForm();
+                        }
                     }
                 }.bind(this));
 

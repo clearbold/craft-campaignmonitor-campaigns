@@ -22,7 +22,7 @@ use League\Flysystem\FileNotFoundException;
  * @license http://craftcms.com/license Craft License Agreement
  * @see http://craftcms.com
  * @package craft.app.volumes
- * @since 3.0
+ * @since 3.0.0
  */
 class Local extends FlysystemVolume implements LocalVolumeInterface
 {
@@ -41,9 +41,7 @@ class Local extends FlysystemVolume implements LocalVolumeInterface
     // =========================================================================
 
     /**
-     * Path to the root of this sources local folder.
-     *
-     * @var string|null
+     * @var string|null Path to the root of this sources local folder.
      */
     public $path;
 
@@ -69,7 +67,6 @@ class Local extends FlysystemVolume implements LocalVolumeInterface
     {
         $rules = parent::rules();
         $rules[] = [['path'], 'required'];
-
         return $rules;
     }
 
@@ -89,7 +86,7 @@ class Local extends FlysystemVolume implements LocalVolumeInterface
      */
     public function getRootPath(): string
     {
-        return FileHelper::normalizePath(Craft::getAlias($this->path));
+        return FileHelper::normalizePath(Craft::parseEnv($this->path));
     }
 
     /**
@@ -98,11 +95,11 @@ class Local extends FlysystemVolume implements LocalVolumeInterface
     public function renameDir(string $path, string $newName)
     {
         $parentDir = dirname($path);
-        $newPath = ($parentDir && $parentDir !== '.' ? $parentDir.'/' : '').$newName;
+        $newPath = ($parentDir && $parentDir !== '.' ? $parentDir . '/' : '') . $newName;
 
         try {
             if (!$this->filesystem()->rename($path, $newPath)) {
-                throw new VolumeException('Couldn’t rename '.$path);
+                throw new VolumeException('Couldn’t rename ' . $path);
             }
         } catch (FileExistsException $exception) {
             throw new VolumeObjectExistsException($exception->getMessage());

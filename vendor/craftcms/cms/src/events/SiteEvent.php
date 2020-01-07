@@ -11,7 +11,7 @@ namespace craft\events;
  * Site event class.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class SiteEvent extends CancelableEvent
 {
@@ -27,4 +27,9 @@ class SiteEvent extends CancelableEvent
      * @var bool Whether the site is brand new
      */
     public $isNew = false;
+
+    /**
+     * @var int|null The old primary site ID
+     */
+    public $oldPrimarySiteId;
 }

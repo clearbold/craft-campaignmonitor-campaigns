@@ -9,10 +9,9 @@ namespace craft\queue;
 
 /**
  * QueueInterface defines the common interface to be implemented by queue classes.
- * A class implementing this interface should also use [[SavableComponentTrait]] and [[JobTrait]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 interface QueueInterface
 {
@@ -39,8 +38,9 @@ interface QueueInterface
      * Sets the progress for the currently reserved job.
      *
      * @param int $progress The job progress (1-100)
+     * @param string|null $label The progress label
      */
-    public function setProgress(int $progress);
+    public function setProgress(int $progress, string $label = null);
 
     /**
      * Returns whether there are any waiting jobs
@@ -60,11 +60,12 @@ interface QueueInterface
      * Returns info about the jobs in the queue.
      *
      * The response array should have sub-arrays with the following keys:
-     * - 'id': The job ID
-     * - 'status': The job status (1 = waiting, 2 = reserved, 3 = done, 4 = failed)
-     * - 'progress': The job progress (0-100)
-     * - 'description': The job description
-     * - 'error': The error message (if the job failed)
+     *
+     * - `id` – the job ID
+     * - `status` – the job status (1 = waiting, 2 = reserved, 3 = done, 4 = failed)
+     * - `progress` – the job progress (0-100)
+     * - `description` – the job description
+     * - `error` – the error message (if the job failed)
      *
      * @param int|null $limit
      * @return array

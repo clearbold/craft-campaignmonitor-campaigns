@@ -17,13 +17,22 @@ use craft\helpers\Html as HtmlHelper;
 use craft\helpers\Json;
 use craft\helpers\Path;
 use craft\helpers\StringHelper;
+use craft\helpers\UrlHelper;
 use craft\web\twig\Environment;
 use craft\web\twig\Extension;
 use craft\web\twig\Template;
 use craft\web\twig\TemplateLoader;
-use Twig_ExtensionInterface;
+use Twig\Error\LoaderError as TwigLoaderError;
+use Twig\Error\RuntimeError as TwigRuntimeError;
+use Twig\Error\SyntaxError as TwigSyntaxError;
+use Twig\Extension\CoreExtension;
+use Twig\Extension\DebugExtension;
+use Twig\Extension\ExtensionInterface;
+use Twig\Extension\StringLoaderExtension;
+use Twig\Template as TwigTemplate;
 use yii\base\Arrayable;
 use yii\base\Exception;
+use yii\base\Model;
 use yii\helpers\Html;
 use yii\web\AssetBundle as YiiAssetBundle;
 
@@ -42,7 +51,7 @@ use yii\web\AssetBundle as YiiAssetBundle;
  * @property-write string[] $registeredAssetBundles the asset bundle names that should be marked as already registered
  * @property-write string[] $registeredJsFiles the JS files that should be marked as already registered
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class View extends \yii\web\View
 {
@@ -113,7 +122,7 @@ class View extends \yii\web\View
     private $_twigOptions;
 
     /**
-     * @var Twig_ExtensionInterface[] List of Twig extensions registered with [[registerTwigExtension()]]
+     * @var ExtensionInterface[] List of Twig extensions registered with [[registerTwigExtension()]]
      */
     private $_twigExtensions = [];
 
@@ -255,11 +264,11 @@ class View extends \yii\web\View
     {
         $twig = new Environment(new TemplateLoader($this), $this->_getTwigOptions());
 
-        $twig->addExtension(new \Twig_Extension_StringLoader());
+        $twig->addExtension(new StringLoaderExtension());
         $twig->addExtension(new Extension($this, $twig));
 
         if (YII_DEBUG) {
-            $twig->addExtension(new \Twig_Extension_Debug());
+            $twig->addExtension(new DebugExtension());
         }
 
         // Add plugin-supplied extensions
@@ -268,8 +277,8 @@ class View extends \yii\web\View
         }
 
         // Set our timezone
-        /** @var \Twig_Extension_Core $core */
-        $core = $twig->getExtension(\Twig_Extension_Core::class);
+        /** @var CoreExtension $core */
+        $core = $twig->getExtension(CoreExtension::class);
         $core->setTimezone(Craft::$app->getTimeZone());
 
         return $twig;
@@ -278,11 +287,17 @@ class View extends \yii\web\View
     /**
      * Registers a new Twig extension, which will be added on existing environments and queued up for future environments.
      *
-     * @param Twig_ExtensionInterface $extension
+     * @param ExtensionInterface $extension
      */
-    public function registerTwigExtension(Twig_ExtensionInterface $extension)
+    public function registerTwigExtension(ExtensionInterface $extension)
     {
-        $this->_twigExtensions[] = $extension;
+        // Make sure this extension isn't already registered
+        $class = get_class($extension);
+        if (isset($this->_twigExtensions[$class])) {
+            return;
+        }
+
+        $this->_twigExtensions[$class] = $extension;
 
         // Add it to any existing Twig environments
         if ($this->_cpTwig !== null) {
@@ -309,9 +324,9 @@ class View extends \yii\web\View
      * @param string $template The name of the template to load
      * @param array $variables The variables that should be available to the template
      * @return string the rendering result
-     * @throws \Twig_Error_Loader if the template doesn’t exist
-     * @throws Exception in case of failure
-     * @throws \RuntimeException in case of failure
+     * @throws TwigLoaderError
+     * @throws TwigRuntimeError
+     * @throws TwigSyntaxError
      */
     public function renderTemplate(string $template, array $variables = []): string
     {
@@ -319,24 +334,22 @@ class View extends \yii\web\View
             return '';
         }
 
-        Craft::trace("Rendering template: $template", __METHOD__);
+        Craft::debug("Rendering template: $template", __METHOD__);
 
         // Render and return
         $renderingTemplate = $this->_renderingTemplate;
         $this->_renderingTemplate = $template;
-        Craft::beginProfile($template, __METHOD__);
 
         try {
             $output = $this->getTwig()->render($template, $variables);
         } catch (\RuntimeException $e) {
             if (!YII_DEBUG) {
                 // Throw a generic exception instead
-                throw new Exception('An error occurred when rendering a template.', 0, $e);
+                throw new \RuntimeException('An error occurred when rendering a template.', 0, $e);
             }
             throw $e;
         }
 
-        Craft::endProfile($template, __METHOD__);
         $this->_renderingTemplate = $renderingTemplate;
 
         $this->afterRenderTemplate($template, $variables, $output);
@@ -360,6 +373,9 @@ class View extends \yii\web\View
      * @param string $template The name of the template to load
      * @param array $variables The variables that should be available to the template
      * @return string the rendering result
+     * @throws TwigLoaderError
+     * @throws TwigRuntimeError
+     * @throws TwigSyntaxError
      */
     public function renderPageTemplate(string $template, array $variables = []): string
     {
@@ -393,8 +409,9 @@ class View extends \yii\web\View
      * @param string $macro The name of the macro.
      * @param array $args Any arguments that should be passed to the macro.
      * @return string The rendered macro output.
-     * @throws Exception in case of failure
-     * @throws \RuntimeException in case of failure
+     * @throws TwigLoaderError
+     * @throws TwigRuntimeError
+     * @throws TwigSyntaxError
      */
     public function renderTemplateMacro(string $template, string $macro, array $args = []): string
     {
@@ -405,11 +422,11 @@ class View extends \yii\web\View
         $this->_renderingTemplate = $template;
 
         try {
-            $output = call_user_func_array([$twigTemplate, 'macro_'.$macro], $args);
+            $output = call_user_func_array([$twigTemplate, 'macro_' . $macro], $args);
         } catch (\RuntimeException $e) {
             if (!YII_DEBUG) {
                 // Throw a generic exception instead
-                throw new Exception('An error occurred when rendering a template.', 0, $e);
+                throw new \RuntimeException('An error occurred when rendering a template.', 0, $e);
             }
             throw $e;
         }
@@ -424,17 +441,45 @@ class View extends \yii\web\View
      *
      * @param string $template The source template string.
      * @param array $variables Any variables that should be available to the template.
+     * @param string $templateMode The template mode to use.
      * @return string The rendered template.
+     * @throws TwigLoaderError
+     * @throws TwigSyntaxError
      */
-    public function renderString(string $template, array $variables = []): string
+    public function renderString(string $template, array $variables = [], string $templateMode = self::TEMPLATE_MODE_SITE): string
     {
+        // If there are no dynamic tags, just return the template
+        if (strpos($template, '{') === false) {
+            return $template;
+        }
+
+        $oldTemplateMode = $this->templateMode;
+        $this->setTemplateMode($templateMode);
+
         $twig = $this->getTwig();
         $twig->setDefaultEscaperStrategy(false);
         $lastRenderingTemplate = $this->_renderingTemplate;
-        $this->_renderingTemplate = 'string:'.$template;
-        $result = $twig->createTemplate($template)->render($variables);
+        $this->_renderingTemplate = 'string:' . $template;
+
+        $e = null;
+        try {
+            $result = $twig->createTemplate($template)->render($variables);
+        } catch (\Throwable $e) {
+            // throw it later
+        }
+
         $this->_renderingTemplate = $lastRenderingTemplate;
         $twig->setDefaultEscaperStrategy();
+        $this->setTemplateMode($oldTemplateMode);
+
+        if ($e !== null) {
+            if (!YII_DEBUG) {
+                // Throw a generic exception instead
+                throw new Exception('An error occurred when rendering a template.', 0, $e);
+            }
+            throw $e;
+        }
+
         return $result;
     }
 
@@ -452,27 +497,35 @@ class View extends \yii\web\View
      * @param string $template the source template string
      * @param mixed $object the object that should be passed into the template
      * @param array $variables any additional variables that should be available to the template
+     * @param string $templateMode The template mode to use.
      * @return string The rendered template.
      * @throws Exception in case of failure
-     * @throws \RuntimeException in case of failure
+     * @throws \Throwable in case of failure
      */
-    public function renderObjectTemplate(string $template, $object, array $variables = []): string
+    public function renderObjectTemplate(string $template, $object, array $variables = [], string $templateMode = self::TEMPLATE_MODE_SITE): string
     {
         // If there are no dynamic tags, just return the template
         if (strpos($template, '{') === false) {
             return $template;
         }
 
+        $oldTemplateMode = $this->templateMode;
+        $this->setTemplateMode($templateMode);
+        $twig = $this->getTwig();
+
+        // Temporarily disable strict variables if it's enabled
+        $strictVariables = $twig->isStrictVariables();
+
+        if ($strictVariables) {
+            $twig->disableStrictVariables();
+        }
+
+        $twig->setDefaultEscaperStrategy(false);
+        $lastRenderingTemplate = $this->_renderingTemplate;
+        $this->_renderingTemplate = 'string:' . $template;
+
+        $e = null;
         try {
-            $twig = $this->getTwig();
-
-            // Temporarily disable strict variables if it's enabled
-            $strictVariables = $twig->isStrictVariables();
-
-            if ($strictVariables) {
-                $twig->disableStrictVariables();
-            }
-
             // Is this the first time we've parsed this template?
             $cacheKey = md5($template);
             if (!isset($this->_objectTemplates[$cacheKey])) {
@@ -482,6 +535,14 @@ class View extends \yii\web\View
             }
 
             // Get the variables to pass to the template
+            if ($object instanceof Model) {
+                foreach ($object->attributes() as $name) {
+                    if (!isset($variables[$name]) && strpos($template, $name) !== false) {
+                        $variables[$name] = $object->$name;
+                    }
+                }
+            }
+
             if ($object instanceof Arrayable) {
                 // See if we should be including any of the extra fields
                 $extra = [];
@@ -497,22 +558,26 @@ class View extends \yii\web\View
             }
 
             $variables['object'] = $object;
+            $variables['_variables'] = $variables;
 
             // Render it!
-            $twig->setDefaultEscaperStrategy(false);
-            $lastRenderingTemplate = $this->_renderingTemplate;
-            $this->_renderingTemplate = 'string:'.$template;
-            /** @var Template $templateObj */
+            /** @var TwigTemplate $templateObj */
             $templateObj = $this->_objectTemplates[$cacheKey];
             $output = $templateObj->render($variables);
-            $this->_renderingTemplate = $lastRenderingTemplate;
-            $twig->setDefaultEscaperStrategy();
+        } catch (\Throwable $e) {
+            // throw it later
+        }
 
-            // Re-enable strict variables
-            if ($strictVariables) {
-                $twig->enableStrictVariables();
-            }
-        } catch (\RuntimeException $e) {
+        $this->_renderingTemplate = $lastRenderingTemplate;
+        $twig->setDefaultEscaperStrategy();
+        $this->setTemplateMode($oldTemplateMode);
+
+        // Re-enable strict variables
+        if ($strictVariables) {
+            $twig->enableStrictVariables();
+        }
+
+        if ($e !== null) {
             if (!YII_DEBUG) {
                 // Throw a generic exception instead
                 throw new Exception('An error occurred when rendering a template.', 0, $e);
@@ -535,7 +600,7 @@ class View extends \yii\web\View
         $tokens = [];
         while (true) {
             $template = preg_replace_callback('/\{\s*([\'"]?)\w+\1\s*:[^\{]+?\}/', function(array $matches) use (&$tokens) {
-                $token = 'tok_'.StringHelper::randomString(10);
+                $token = 'tok_' . StringHelper::randomString(10);
                 $tokens[$token] = $matches[0];
                 return $token;
             }, $template, -1, $count);
@@ -545,7 +610,7 @@ class View extends \yii\web\View
         }
 
         // Swap out the remaining {xyz} tags with {{object.xyz}}
-        $template = preg_replace('/(?<!\{)\{\s*(\w+)([^\{]*?)\}/', '{{ ($1 ?? object.$1)$2|raw }}', $template);
+        $template = preg_replace('/(?<!\{)\{\s*(\w+)([^\{]*?)\}/', '{{ (_variables.$1 ?? object.$1)$2|raw }}', $template);
 
         // Bring the objects back
         foreach (array_reverse($tokens) as $token => $value) {
@@ -568,7 +633,7 @@ class View extends \yii\web\View
     {
         try {
             return ($this->resolveTemplate($name) !== false);
-        } catch (\Twig_Error_Loader $e) {
+        } catch (TwigLoaderError $e) {
             // _validateTemplateName() han an issue with it
             return false;
         }
@@ -649,7 +714,7 @@ class View extends \yii\web\View
         // Normalize the template name
         $name = trim(preg_replace('#/{2,}#', '/', str_replace('\\', '/', StringHelper::convertToUtf8($name))), '/');
 
-        $key = $this->_templatesPath.':'.$name;
+        $key = $this->_templatesPath . ':' . $name;
 
         // Is this template path already cached?
         if (isset($this->_templatePaths[$key])) {
@@ -665,7 +730,7 @@ class View extends \yii\web\View
         // Should we be looking for a localized version of the template?
         if ($this->_templateMode === self::TEMPLATE_MODE_SITE && Craft::$app->getIsInstalled()) {
             /** @noinspection PhpUnhandledExceptionInspection */
-            $sitePath = $this->_templatesPath.DIRECTORY_SEPARATOR.Craft::$app->getSites()->getCurrentSite()->handle;
+            $sitePath = $this->_templatesPath . DIRECTORY_SEPARATOR . Craft::$app->getSites()->getCurrentSite()->handle;
             if (is_dir($sitePath)) {
                 $basePaths[] = $sitePath;
             }
@@ -692,7 +757,7 @@ class View extends \yii\web\View
             foreach ($roots as $templateRoot => $basePaths) {
                 /** @var string[] $basePaths */
                 $templateRootLen = strlen($templateRoot);
-                if (strncasecmp($templateRoot.'/', $name.'/', $templateRootLen + 1) === 0) {
+                if (strncasecmp($templateRoot . '/', $name . '/', $templateRootLen + 1) === 0) {
                     $subName = strlen($name) === $templateRootLen ? '' : substr($name, $templateRootLen + 1);
                     foreach ($basePaths as $basePath) {
                         if (($path = $this->_resolveTemplate($basePath, $subName)) !== null) {
@@ -734,18 +799,18 @@ class View extends \yii\web\View
      * @param string|null $key the key that identifies the CSS code block. If null, it will use
      * $css as the key. If two CSS code blocks are registered with the same key, the latter
      * will overwrite the former.
-     * @deprecated in 3.0. Use [[registerCss()]] and type your own media selector.
+     * @deprecated in 3.0.0. Use [[registerCss()]] and type your own media selector.
      */
     public function registerHiResCss(string $css, array $options = [], string $key = null)
     {
         Craft::$app->getDeprecator()->log('registerHiResCss', 'craft\\web\\View::registerHiResCss() has been deprecated. Use registerCss() instead, and type your own media selector.');
 
-        $css = "@media only screen and (-webkit-min-device-pixel-ratio: 1.5),\n".
-            "only screen and (   -moz-min-device-pixel-ratio: 1.5),\n".
-            "only screen and (     -o-min-device-pixel-ratio: 3/2),\n".
-            "only screen and (        min-device-pixel-ratio: 1.5),\n".
-            "only screen and (        min-resolution: 1.5dppx){\n".
-            $css."\n".
+        $css = "@media only screen and (-webkit-min-device-pixel-ratio: 1.5),\n" .
+            "only screen and (   -moz-min-device-pixel-ratio: 1.5),\n" .
+            "only screen and (     -o-min-device-pixel-ratio: 3/2),\n" .
+            "only screen and (        min-device-pixel-ratio: 1.5),\n" .
+            "only screen and (        min-resolution: 1.5dppx){\n" .
+            $css . "\n" .
             '}';
 
         $this->registerCss($css, $options, $key);
@@ -793,7 +858,7 @@ class View extends \yii\web\View
 
         foreach ([self::POS_HEAD, self::POS_BEGIN, self::POS_END, self::POS_LOAD, self::POS_READY] as $pos) {
             if (!empty($this->js[$pos])) {
-                $js .= implode("\n", $this->js[$pos])."\n";
+                $js .= implode("\n", $this->js[$pos]) . "\n";
             }
         }
 
@@ -902,7 +967,7 @@ class View extends \yii\web\View
         $this->registerAllAssetFiles();
 
         // Get the rendered body begin+end HTML
-        $html = $this->renderBodyBeginHtml().
+        $html = $this->renderBodyBeginHtml() .
             $this->renderBodyEndHtml(true);
 
         // Clear out the queued up files
@@ -940,7 +1005,7 @@ class View extends \yii\web\View
             if ($translation !== $message) {
                 $jsMessage = Json::encode($message);
                 $jsTranslation = Json::encode($translation);
-                $js .= ($js !== '' ? "\n" : '')."Craft.translations[{$jsCategory}][{$jsMessage}] = {$jsTranslation};";
+                $js .= ($js !== '' ? PHP_EOL : '') . "Craft.translations[{$jsCategory}][{$jsMessage}] = {$jsTranslation};";
             }
         }
 
@@ -1000,20 +1065,25 @@ JS;
      * The template mode defines:
      * - the base path that templates should be looked for in
      * - the default template file extensions that should be automatically added when looking for templates
-     * - the "index" template filenames that sholud be checked when looking for templates
+     * - the "index" template filenames that should be checked when looking for templates
      *
      * @param string $templateMode Either 'site' or 'cp'
      * @throws Exception if $templateMode is invalid
      */
     public function setTemplateMode(string $templateMode)
     {
+        // Ignore if it's already set to that
+        if ($templateMode === $this->_templateMode) {
+            return;
+        }
+
         // Validate
         if (!in_array($templateMode, [
             self::TEMPLATE_MODE_CP,
             self::TEMPLATE_MODE_SITE
         ], true)
         ) {
-            throw new Exception('"'.$templateMode.'" is not a valid template mode');
+            throw new Exception('"' . $templateMode . '" is not a valid template mode');
         }
 
         // Set the new template mode
@@ -1109,12 +1179,12 @@ JS;
                 [$this, '_createTextareaMarker'], $html);
 
             // name= attributes
-            $html = preg_replace('/(?<![\w\-])(name=(\'|"))([^\'"\[\]]+)([^\'"]*)\2/i', '$1'.$namespace.'[$3]$4$2', $html);
+            $html = preg_replace('/(?<![\w\-])(name=(\'|"))([^\'"\[\]]+)([^\'"]*)\2/i', '$1' . $namespace . '[$3]$4$2', $html);
 
             // id= and for= attributes
             if ($otherAttributes) {
                 $idNamespace = $this->formatInputId($namespace);
-                $html = preg_replace('/(?<![\w\-])((id|for|list|aria\-labelledby|data\-target|data\-reverse\-target|data\-target\-prefix)=(\'|")#?)([^\.\'"][^\'"]*)?\3/i', '$1'.$idNamespace.'-$4$3', $html);
+                $html = preg_replace('/(?<![\w\-])((id|for|list|aria\-labelledby|data\-target|data\-reverse\-target|data\-target\-prefix)=(\'|")#?)([^\.\'"][^\'"]*)?\3/i', '$1' . $idNamespace . '-$4$3', $html);
             }
 
             // Bring back the textarea content
@@ -1141,7 +1211,7 @@ JS;
         }
 
         if ($namespace !== null) {
-            $inputName = preg_replace('/([^\'"\[\]]+)([^\'"]*)/', $namespace.'[$1]$2', $inputName);
+            $inputName = preg_replace('/([^\'"\[\]]+)([^\'"]*)/', $namespace . '[$1]$2', $inputName);
         }
 
         return $inputName;
@@ -1164,7 +1234,7 @@ JS;
         }
 
         if ($namespace !== null) {
-            $inputId = $this->formatInputId($namespace).'-'.$inputId;
+            $inputId = $this->formatInputId($namespace) . '-' . $inputId;
         }
 
         return $inputId;
@@ -1244,6 +1314,7 @@ JS;
      * Sets the JS files that should be marked as already registered.
      *
      * @param string[] $keys
+     * @since 3.0.10
      */
     public function setRegisteredJsFiles(array $keys)
     {
@@ -1254,6 +1325,7 @@ JS;
      * Sets the asset bundle names that should be marked as already registered.
      *
      * @param string[] $names Asset bundle names
+     * @since 3.0.10
      */
     public function setRegisteredAssetBundles(array $names)
     {
@@ -1366,7 +1438,7 @@ JS;
     {
         $lines = [];
         if (!empty($this->title)) {
-            $lines[] = '<title>'.Html::encode($this->title).'</title>';
+            $lines[] = '<title>' . Html::encode($this->title) . '</title>';
         }
         if (!empty($this->_scripts[self::POS_HEAD])) {
             $lines[] = implode("\n", $this->_scripts[self::POS_HEAD]);
@@ -1374,7 +1446,7 @@ JS;
 
         $html = parent::renderHeadHtml();
 
-        return empty($lines) ? $html : implode("\n", $lines).$html;
+        return empty($lines) ? $html : implode("\n", $lines) . $html;
     }
 
     /**
@@ -1389,7 +1461,7 @@ JS;
 
         $html = parent::renderBodyBeginHtml();
 
-        return empty($lines) ? $html : implode("\n", $lines).$html;
+        return empty($lines) ? $html : implode("\n", $lines) . $html;
     }
 
     /**
@@ -1404,7 +1476,7 @@ JS;
 
         $html = parent::renderBodyEndHtml($ajaxMode);
 
-        return empty($lines) ? $html : implode("\n", $lines).$html;
+        return empty($lines) ? $html : implode("\n", $lines) . $html;
     }
 
     /**
@@ -1414,6 +1486,10 @@ JS;
      */
     protected function registerAssetFlashes()
     {
+        if (!Craft::$app->getRequest()->getIsCpRequest()) {
+            return;
+        }
+
         $session = Craft::$app->getSession();
 
         if ($session->getIsActive()) {
@@ -1461,20 +1537,20 @@ JS;
 
     /**
      * Ensures that a template name isn't null, and that it doesn't lead outside the template folder. Borrowed from
-     * [[Twig_Loader_Filesystem]].
+     * [[\Twig\Loader\FilesystemLoader]].
      *
      * @param string $name
-     * @throws \Twig_Error_Loader
+     * @throws TwigLoaderError
      */
     private function _validateTemplateName(string $name)
     {
         if (StringHelper::contains($name, "\0")) {
-            throw new \Twig_Error_Loader(Craft::t('app', 'A template name cannot contain NUL bytes.'));
+            throw new TwigLoaderError(Craft::t('app', 'A template name cannot contain NUL bytes.'));
         }
 
         if (Path::ensurePathIsContained($name) === false) {
-            Craft::error('Someone tried to load a template outside the templates folder: '.$name);
-            throw new \Twig_Error_Loader(Craft::t('app', 'Looks like you are trying to load a template outside the template folder.'));
+            Craft::error('Someone tried to load a template outside the templates folder: ' . $name);
+            throw new TwigLoaderError(Craft::t('app', 'Looks like you are trying to load a template outside the template folder.'));
         }
     }
 
@@ -1492,16 +1568,16 @@ JS;
         $name = trim(FileHelper::normalizePath($name), '/');
 
         // $name could be an empty string (e.g. to load the homepage template)
-        if ($name) {
+        if ($name !== '') {
             // Maybe $name is already the full file path
-            $testPath = $basePath.DIRECTORY_SEPARATOR.$name;
+            $testPath = $basePath . DIRECTORY_SEPARATOR . $name;
 
             if (is_file($testPath)) {
                 return $testPath;
             }
 
             foreach ($this->_defaultTemplateExtensions as $extension) {
-                $testPath = $basePath.DIRECTORY_SEPARATOR.$name.'.'.$extension;
+                $testPath = $basePath . DIRECTORY_SEPARATOR . $name . '.' . $extension;
 
                 if (is_file($testPath)) {
                     return $testPath;
@@ -1511,7 +1587,7 @@ JS;
 
         foreach ($this->_indexTemplateFilenames as $filename) {
             foreach ($this->_defaultTemplateExtensions as $extension) {
-                $testPath = $basePath.($name ? DIRECTORY_SEPARATOR.$name : '').DIRECTORY_SEPARATOR.$filename.'.'.$extension;
+                $testPath = $basePath . ($name !== '' ? DIRECTORY_SEPARATOR . $name : '') . DIRECTORY_SEPARATOR . $filename . '.' . $extension;
 
                 if (is_file($testPath)) {
                     return $testPath;
@@ -1534,12 +1610,22 @@ JS;
         }
 
         $this->_twigOptions = [
-            'base_template_class' => Template::class,
             // See: https://github.com/twigphp/Twig/issues/1951
             'cache' => Craft::$app->getPath()->getCompiledTemplatesPath(),
             'auto_reload' => true,
             'charset' => Craft::$app->charset,
         ];
+
+        $generalConfig = Craft::$app->getConfig()->getGeneral();
+
+        // Only load our custom Template class if they still have suppressTemplateErrors enabled
+        if ($generalConfig->suppressTemplateErrors) {
+            $this->_twigOptions['base_template_class'] = Template::class;
+        }
+
+        if ($generalConfig->headlessMode && Craft::$app->getRequest()->getIsSiteRequest()) {
+            $this->_twigOptions['autoescape'] = 'js';
+        }
 
         if (YII_DEBUG) {
             $this->_twigOptions['debug'] = true;
@@ -1590,10 +1676,10 @@ JS;
      */
     private function _createTextareaMarker(array $matches): string
     {
-        $marker = '{marker:'.StringHelper::randomString().'}';
+        $marker = '{marker:' . StringHelper::randomString() . '}';
         $this->_textareaMarkers[$marker] = $matches[2];
 
-        return $matches[1].$marker.$matches[3];
+        return $matches[1] . $marker . $matches[3];
     }
 
     private function _registeredJs($property, $names)
@@ -1627,6 +1713,7 @@ JS;
 
         /** @var Element $element */
         $element = $context['element'];
+        $label = $element->getUiLabel();
 
         if (!isset($context['context'])) {
             $context['context'] = 'index';
@@ -1656,10 +1743,10 @@ JS;
                     $srcset = $element->getThumbUrl($size);
                 }
 
-                $srcsets[] = $srcset.' '.$size.'w';
+                $srcsets[] = $srcset . ' ' . $size . 'w';
             }
 
-            $sizesHtml = ($elementSize === 'small' ? self::$_elementThumbSizes[0] : self::$_elementThumbSizes[2]).'px';
+            $sizesHtml = ($elementSize === 'small' ? self::$_elementThumbSizes[0] : self::$_elementThumbSizes[2]) . 'px';
             $srcsetHtml = implode(', ', $srcsets);
             $imgHtml = "<div class='elementthumb' data-sizes='{$sizesHtml}' data-srcset='{$srcsetHtml}'></div>";
         } else {
@@ -1669,7 +1756,7 @@ JS;
         $htmlAttributes = array_merge(
             $element->getHtmlAttributes($context['context']),
             [
-                'class' => 'element '.$elementSize,
+                'class' => 'element ' . $elementSize,
                 'data-type' => get_class($element),
                 'data-id' => $element->id,
                 'data-site-id' => $element->siteId,
@@ -1677,10 +1764,15 @@ JS;
                 'data-label' => (string)$element,
                 'data-url' => $element->getUrl(),
                 'data-level' => $element->level,
+                'title' => $label . (Craft::$app->getIsMultiSite() ? ' – ' . $element->getSite()->name : ''),
             ]);
 
         if ($context['context'] === 'field') {
             $htmlAttributes['class'] .= ' removable';
+        }
+
+        if ($element->hasErrors()) {
+            $htmlAttributes['class'] .= ' error';
         }
 
         if ($element::hasStatuses()) {
@@ -1694,24 +1786,28 @@ JS;
         $html = '<div';
 
         foreach ($htmlAttributes as $attribute => $value) {
-            $html .= ' '.$attribute.($value !== null ? '="'.HtmlHelper::encode($value).'"' : '');
+            $html .= ' ' . $attribute . ($value !== null ? '="' . HtmlHelper::encode($value) . '"' : '');
         }
 
         if (ElementHelper::isElementEditable($element)) {
             $html .= ' data-editable';
         }
 
+        if ($element->trashed) {
+            $html .= ' data-trashed';
+        }
+
         $html .= '>';
 
         if ($context['context'] === 'field' && isset($context['name'])) {
-            $html .= '<input type="hidden" name="'.$context['name'].'[]" value="'.$element->id.'">';
-            $html .= '<a class="delete icon" title="'.Craft::t('app', 'Remove').'"></a> ';
+            $html .= '<input type="hidden" name="' . $context['name'] . '[]" value="' . $element->id . '">';
+            $html .= '<a class="delete icon" title="' . Craft::t('app', 'Remove') . '"></a> ';
         }
 
         if ($element::hasStatuses()) {
             $status = $element->getStatus();
-            $statusClasses = $status.' '.($element::statuses()[$status]['color'] ?? '');
-            $html .= '<span class="status '.$statusClasses.'"></span>';
+            $statusClasses = $status . ' ' . ($element::statuses()[$status]['color'] ?? '');
+            $html .= '<span class="status ' . $statusClasses . '"></span>';
         }
 
         $html .= $imgHtml;
@@ -1719,13 +1815,19 @@ JS;
 
         $html .= '<span class="title">';
 
-        $label = HtmlHelper::encode($element);
+        $encodedLabel = HtmlHelper::encode($label);
 
-        if ($context['context'] === 'index' && ($cpEditUrl = $element->getCpEditUrl())) {
+        if ($context['context'] === 'index' && !$element->trashed && ($cpEditUrl = $element->getCpEditUrl())) {
+            if ($element->getIsDraft()) {
+                $cpEditUrl = UrlHelper::urlWithParams($cpEditUrl, ['draftId' => $element->draftId]);
+            } else if ($element->getIsRevision()) {
+                $cpEditUrl = UrlHelper::urlWithParams($cpEditUrl, ['revisionId' => $element->revisionId]);
+            }
+
             $cpEditUrl = HtmlHelper::encode($cpEditUrl);
-            $html .= "<a href=\"{$cpEditUrl}\">{$label}</a>";
+            $html .= "<a href=\"{$cpEditUrl}\">{$encodedLabel}</a>";
         } else {
-            $html .= $label;
+            $html .= $encodedLabel;
         }
 
         $html .= '</span></div></div>';

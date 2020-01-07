@@ -35,6 +35,7 @@ Craft.CP = Garnish.Base.extend(
 
         checkingForUpdates: false,
         forcingRefreshOnUpdatesCheck: false,
+        includingDetailsOnUpdatesCheck: false,
         checkForUpdatesCallbacks: null,
 
         init: function() {
@@ -124,7 +125,7 @@ Craft.CP = Garnish.Base.extend(
             // hat tip: https://stackoverflow.com/a/2911045/1688568
             $('a').each(function() {
                 if (this.hostname.length && this.hostname !== location.hostname && typeof $(this).attr('target') === 'undefined') {
-                    $(this).attr('target', '_blank')
+                    $(this).attr('rel', 'noopener').attr('target', '_blank')
                 }
             });
         },
@@ -137,39 +138,54 @@ Craft.CP = Garnish.Base.extend(
                 return;
             }
 
-            if (!Craft.forceConfirmUnload) {
-                this.initialFormValues = [];
-            }
+            var $form, serialized;
 
             for (var i = 0; i < this.$confirmUnloadForms.length; i++) {
-                var $form = $(this.$confirmUnloadForms);
-
-                if (!Craft.forceConfirmUnload) {
-                    this.initialFormValues[i] = $form.serialize();
+                $form = this.$confirmUnloadForms.eq(i);
+                if (!$form.data('initialSerializedValue')) {
+                    if (typeof $form.data('serializer') === 'function') {
+                        serialized = $form.data('serializer')();
+                    } else {
+                        serialized = $form.serialize();
+                    }
+                    $form.data('initialSerializedValue', serialized);
                 }
-
                 this.addListener($form, 'submit', function() {
                     this.removeListener(Garnish.$win, 'beforeunload');
                 });
             }
 
             this.addListener(Garnish.$win, 'beforeunload', function(ev) {
-                for (var i = 0; i < this.$confirmUnloadForms.length; i++) {
-                    if (
-                        Craft.forceConfirmUnload ||
-                        this.initialFormValues[i] !== $(this.$confirmUnloadForms[i]).serialize()
-                    ) {
-                        var message = Craft.t('app', 'Any changes will be lost if you leave this page.');
-
-                        if (ev) {
-                            ev.originalEvent.returnValue = message;
+                var confirmUnload = false;
+                var $form, serialized;
+                if (typeof Craft.livePreview !== 'undefined' && Craft.livePreview.inPreviewMode) {
+                    confirmUnload = true;
+                } else {
+                    for (var i = 0; i < this.$confirmUnloadForms.length; i++) {
+                        $form = this.$confirmUnloadForms.eq(i);
+                        if (typeof $form.data('serializer') === 'function') {
+                            serialized = $form.data('serializer')();
+                        } else {
+                            serialized = $form.serialize();
                         }
-                        else {
-                            window.event.returnValue = message;
+                        if ($form.data('initialSerializedValue') !== serialized) {
+                            confirmUnload = true;
+                            break;
                         }
-
-                        return message;
                     }
+                }
+
+                if (confirmUnload) {
+                    var message = Craft.t('app', 'Any changes will be lost if you leave this page.');
+
+                    if (ev) {
+                        ev.originalEvent.returnValue = message;
+                    }
+                    else {
+                        window.event.returnValue = message;
+                    }
+
+                    return message;
                 }
             });
         },
@@ -190,7 +206,10 @@ Craft.CP = Garnish.Base.extend(
                 $('<input type="hidden" name="redirect" value="' + this.$primaryForm.data('saveshortcut-redirect') + '"/>').appendTo(this.$primaryForm);
             }
 
-            this.$primaryForm.trigger('submit');
+            this.$primaryForm.trigger({
+                type: 'submit',
+                saveShortcut: true,
+            });
         },
 
         updateSidebarMenuLabel: function() {
@@ -231,7 +250,7 @@ Craft.CP = Garnish.Base.extend(
                         this.selectTab(ev.currentTarget);
                     });
 
-                    if (href === document.location.hash) {
+                    if (encodeURIComponent(href.substr(1)) === document.location.hash.substr(1)) {
                         this.selectTab(a);
                     }
                 }
@@ -461,15 +480,24 @@ Craft.CP = Garnish.Base.extend(
             }
         },
 
-        checkForUpdates: function(forceRefresh, callback) {
+        checkForUpdates: function(forceRefresh, includeDetails, callback) {
+            // Make 'includeDetails' optional
+            if (typeof includeDetails === 'function') {
+                callback = includeDetails;
+                includeDetails = false;
+            }
+
             // If forceRefresh == true, we're currently checking for updates, and not currently forcing a refresh,
             // then just set a new callback that re-checks for updates when the current one is done.
-            if (this.checkingForUpdates && forceRefresh === true && !this.forcingRefreshOnUpdatesCheck) {
+            if (this.checkingForUpdates && (
+                (forceRefresh === true && !this.forcingRefreshOnUpdatesCheck) ||
+                (includeDetails === true && !this.includingDetailsOnUpdatesCheck)
+            )) {
                 var realCallback = callback;
 
                 callback = function() {
-                    Craft.cp.checkForUpdates(true, realCallback);
-                };
+                    this.checkForUpdates(forceRefresh, includeDetails, realCallback);
+                }.bind(this);
             }
 
             // Callback function?
@@ -484,29 +512,95 @@ Craft.CP = Garnish.Base.extend(
             if (!this.checkingForUpdates) {
                 this.checkingForUpdates = true;
                 this.forcingRefreshOnUpdatesCheck = (forceRefresh === true);
+                this.includingDetailsOnUpdatesCheck = (includeDetails === true);
 
-                var data = {
-                    forceRefresh: (forceRefresh === true)
-                };
+                this._checkForUpdates(forceRefresh, includeDetails)
+                    .then(function(info) {
+                        this.updateUtilitiesBadge();
+                        this.checkingForUpdates = false;
 
-                Craft.queueActionRequest('app/check-for-updates', data, $.proxy(function(info) {
-                    this.updateUtilitiesBadge();
-                    this.checkingForUpdates = false;
+                        if (Garnish.isArray(this.checkForUpdatesCallbacks)) {
+                            var callbacks = this.checkForUpdatesCallbacks;
+                            this.checkForUpdatesCallbacks = null;
 
-                    if (Garnish.isArray(this.checkForUpdatesCallbacks)) {
-                        var callbacks = this.checkForUpdatesCallbacks;
-                        this.checkForUpdatesCallbacks = null;
-
-                        for (var i = 0; i < callbacks.length; i++) {
-                            callbacks[i](info);
+                            for (var i = 0; i < callbacks.length; i++) {
+                                callbacks[i](info);
+                            }
                         }
-                    }
 
-                    this.trigger('checkForUpdates', {
-                        updateInfo: info
-                    });
-                }, this));
+                        this.trigger('checkForUpdates', {
+                            updateInfo: info
+                        });
+                    }.bind(this));
             }
+        },
+
+        _checkForUpdates: function(forceRefresh, includeDetails) {
+            return new Promise(function(resolve, reject) {
+                if (!forceRefresh) {
+                    this._checkForCachedUpdates(includeDetails)
+                        .then(function(info) {
+                            if (info.cached !== false) {
+                                resolve(info);
+                            }
+
+                            this._getUpdates(includeDetails)
+                                .then(function(info) {
+                                    resolve(info);
+                                });
+                        }.bind(this));
+                } else {
+                    this._getUpdates(includeDetails)
+                        .then(function(info) {
+                            resolve(info);
+                        });
+                }
+            }.bind(this));
+        },
+
+        _checkForCachedUpdates: function(includeDetails) {
+            return new Promise(function(resolve, reject) {
+                var data = {
+                    onlyIfCached: true,
+                    includeDetails: includeDetails,
+                };
+                Craft.postActionRequest('app/check-for-updates', data, function(info, textStatus) {
+                    if (textStatus === 'success') {
+                        resolve(info);
+                    } else {
+                        resolve({ cached: false });
+                    }
+                });
+            });
+        },
+
+        _getUpdates: function(includeDetails) {
+            return new Promise(function(resolve, reject) {
+                Craft.sendApiRequest('GET', 'updates')
+                    .then(function(updates) {
+                        this._cacheUpdates(updates, includeDetails).then(resolve);
+                    }.bind(this))
+                    .catch(function(e) {
+                        this._cacheUpdates({}).then(resolve);
+                    }.bind(this));
+            }.bind(this));
+        },
+
+        _cacheUpdates: function(updates, includeDetails) {
+            return new Promise(function(resolve, reject) {
+                Craft.postActionRequest('app/cache-updates', {
+                    updates: updates,
+                    includeDetails: includeDetails,
+                }, function(info, textStatus) {
+                    if (textStatus === 'success') {
+                        resolve(info);
+                    } else {
+                        reject();
+                    }
+                }, {
+                    contentType: 'json'
+                });
+            });
         },
 
         updateUtilitiesBadge: function() {
@@ -600,6 +694,7 @@ Craft.CP = Garnish.Base.extend(
                 this.displayedJobInfo &&
                 oldInfo.id === this.displayedJobInfo.id &&
                 oldInfo.progress === this.displayedJobInfo.progress &&
+                oldInfo.progressLabel === this.displayedJobInfo.progressLabel &&
                 oldInfo.status === this.displayedJobInfo.status
             ) {
                 this.displayedJobInfoUnchanged++;
@@ -676,7 +771,7 @@ Craft.CP = Garnish.Base.extend(
         JOB_STATUS_FAILED: 4
     });
 
-Garnish.$scrollContainer = $('#content-container');
+Garnish.$scrollContainer = $('#content');
 Craft.cp = new Craft.CP();
 
 
@@ -1001,6 +1096,7 @@ QueueHUD.Job = Garnish.Base.extend(
         $container: null,
         $statusContainer: null,
         $descriptionContainer: null,
+        $progressLabel: null,
 
         _progressBar: null,
 
@@ -1010,9 +1106,10 @@ QueueHUD.Job = Garnish.Base.extend(
             this.id = info.id;
             this.description = info.description;
 
-            this.$container = $('<div class="job"/>');
-            this.$statusContainer = $('<div class="job-status"/>').appendTo(this.$container);
-            this.$descriptionContainer = $('<div class="job-description"/>').appendTo(this.$container).text(info.description);
+            this.$container = $('<div/>', { 'class': 'job' });
+            var $flex = $('<div/>', { 'class': 'flex' }).appendTo(this.$container);
+            $('<div/>', { 'class': 'flex-grow' }).text(info.description).appendTo($flex);
+            this.$statusContainer = $('<div class="job-status"/>').appendTo($flex);
 
             this.$container.data('job', this);
 
@@ -1061,6 +1158,16 @@ QueueHUD.Job = Garnish.Base.extend(
 
             if (this.status === Craft.CP.JOB_STATUS_RESERVED) {
                 this._progressBar.setProgressPercentage(info.progress);
+
+                if (info.progressLabel) {
+                    if (!this.$progressLabel) {
+                        this.$progressLabel = $('<div class="light smalltext"/>').appendTo(this.$container);
+                    }
+                    this.$progressLabel.text(info.progressLabel);
+                }
+            } else if (this.$progressLabel) {
+                this.$progressLabel.remove();
+                this.$progressLabel = null;
             }
         },
 

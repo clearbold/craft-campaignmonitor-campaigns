@@ -15,7 +15,7 @@ use craft\base\Model;
  *
  * @property bool $isSortable whether elements in this structure can be sorted by the current user
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Structure extends Model
 {
@@ -32,6 +32,11 @@ class Structure extends Model
      */
     public $maxLevels;
 
+    /**
+     * @var string|null UID
+     */
+    public $uid;
+
     // Public Methods
     // =========================================================================
 
@@ -40,9 +45,9 @@ class Structure extends Model
      */
     public function rules()
     {
-        return [
-            [['id', 'maxLevels'], 'number', 'integerOnly' => true],
-        ];
+        $rules = parent::rules();
+        $rules[] = [['id', 'maxLevels'], 'number', 'integerOnly' => true];
+        return $rules;
     }
 
     /**
@@ -52,6 +57,6 @@ class Structure extends Model
      */
     public function getIsSortable(): bool
     {
-        return Craft::$app->getSession()->checkAuthorization('editStructure:'.$this->id);
+        return Craft::$app->getSession()->checkAuthorization('editStructure:' . $this->id);
     }
 }

@@ -7,6 +7,7 @@
 
 namespace craft\db;
 
+use craft\base\ClonefixTrait;
 use craft\events\DefineBehaviorsEvent;
 use craft\helpers\ArrayHelper;
 use yii\base\Exception;
@@ -16,10 +17,15 @@ use yii\db\Connection as YiiConnection;
  * Class Query
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Query extends \yii\db\Query
 {
+    // Traits
+    // =========================================================================
+
+    use ClonefixTrait;
+
     // Constants
     // =========================================================================
 

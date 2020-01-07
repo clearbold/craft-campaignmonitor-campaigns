@@ -92,11 +92,13 @@
                     checked: (option.value in field.allowedKinds)
                 }) }}
             {% endfor %}
+            {{ forms.errorList(field.getErrors('allowedKinds')) }}
         </div>
     {% endblock %}
 
     {{ block('limitField') }}
     {{ block('viewModeField') }}
     {{ block('selectionLabelField') }}
+    {{ block('validateRelatedElementsField') }}
     {{ block('advancedSettings') }}
 {% endblock %}

@@ -19,5 +19,7 @@ return array(
     'CS_REST_Transactional_ClassicEmail' => $vendorDir . '/campaignmonitor/createsend-php/csrest_transactional_classicemail.php',
     'CS_REST_Transactional_SmartEmail' => $vendorDir . '/campaignmonitor/createsend-php/csrest_transactional_smartemail.php',
     'CS_REST_Transactional_Timeline' => $vendorDir . '/campaignmonitor/createsend-php/csrest_transactional_timeline.php',
+    'JsonException' => $vendorDir . '/symfony/polyfill-php73/Resources/stubs/JsonException.php',
+    'Normalizer' => $vendorDir . '/symfony/polyfill-intl-normalizer/Resources/stubs/Normalizer.php',
     'RequirementsChecker' => $vendorDir . '/craftcms/server-check/server/requirements/RequirementsChecker.php',
 );

@@ -17,7 +17,7 @@ use yii\base\Exception;
  * An instance of the Path service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getPath()|`Craft::$app->path`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Path extends Component
 {
@@ -69,24 +69,80 @@ class Path extends Component
     }
 
     /**
+     * Returns the path to `config/project.yaml`.
+     *
+     * @return string
+     * @since 3.1.2
+     */
+    public function getProjectConfigFilePath(): string
+    {
+        return $this->getConfigPath() . DIRECTORY_SEPARATOR . ProjectConfig::CONFIG_FILENAME;
+    }
+
+    /**
      * Returns the path to the `storage/` directory.
      *
+     * @param bool $create Whether the directory should be created if it doesn't exist
      * @return string
      * @throws Exception
      */
-    public function getStoragePath(): string
+    public function getStoragePath(bool $create = true): string
     {
-        if ($this->_storagePath !== null) {
-            return $this->_storagePath;
+        if ($this->_storagePath === null) {
+            $path = Craft::getAlias('@storage');
+
+            if ($path === false) {
+                throw new Exception('There was a problem getting the storage path.');
+            }
+
+            $this->_storagePath = FileHelper::normalizePath($path);
         }
 
-        $storagePath = Craft::getAlias('@storage');
-
-        if ($storagePath === false) {
-            throw new Exception('There was a problem getting the storage path.');
+        if ($create) {
+            FileHelper::createDirectory($this->_storagePath);
         }
 
-        return $this->_storagePath = FileHelper::normalizePath($storagePath);
+        return $this->_storagePath;
+    }
+
+    /**
+     * Returns the path to the `storage/composer-backups/` directory.
+     *
+     * @param bool $create Whether the directory should be created if it doesn't exist
+     * @return string
+     * @throws Exception
+     * @since 3.0.38
+     */
+    public function getComposerBackupsPath(bool $create = true): string
+    {
+        $path = $this->getStoragePath($create) . DIRECTORY_SEPARATOR . 'composer-backups';
+
+        if ($create) {
+            FileHelper::createDirectory($path);
+            $this->_createGitignore($path);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Returns the path to the `storage/configs/` directory.
+     *
+     * @param bool $create Whether the directory should be created if it doesn't exist
+     * @return string
+     * @throws Exception
+     * @since 3.1.0
+     */
+    public function getConfigBackupPath(bool $create = true): string
+    {
+        $path = $this->getStoragePath($create) . DIRECTORY_SEPARATOR . 'config-backups';
+
+        if ($create) {
+            FileHelper::createDirectory($path);
+            $this->_createGitignore($path);
+        }
+
+        return $path;
     }
 
     /**
@@ -94,10 +150,11 @@ class Path extends Component
      *
      * @param bool $create Whether the directory should be created if it doesn't exist
      * @return string
+     * @throws Exception
      */
     public function getRebrandPath(bool $create = true): string
     {
-        $path = $this->getStoragePath($create).DIRECTORY_SEPARATOR.'rebrand';
+        $path = $this->getStoragePath($create) . DIRECTORY_SEPARATOR . 'rebrand';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -132,22 +189,15 @@ class Path extends Component
      *
      * @param bool $create Whether the directory should be created if it doesn't exist
      * @return string
+     * @throws Exception
      */
     public function getRuntimePath(bool $create = true): string
     {
-        $path = $this->getStoragePath($create).DIRECTORY_SEPARATOR.'runtime';
+        $path = $this->getStoragePath($create) . DIRECTORY_SEPARATOR . 'runtime';
 
         if ($create) {
             FileHelper::createDirectory($path);
-
-            // Add a .gitignore file in there if there isn't one
-            $gitignorePath = $path.DIRECTORY_SEPARATOR.'.gitignore';
-            if (!is_file($gitignorePath)) {
-                FileHelper::writeToFile($gitignorePath, "*\n!.gitignore\n", [
-                    // Prevent a segfault if this is called recursively
-                    'lock' => false,
-                ]);
-            }
+            $this->_createGitignore($path);
         }
 
         return $path;
@@ -158,10 +208,11 @@ class Path extends Component
      *
      * @param bool $create Whether the directory should be created if it doesn't exist
      * @return string
+     * @throws Exception
      */
     public function getDbBackupPath(bool $create = true): string
     {
-        $path = $this->getStoragePath($create).DIRECTORY_SEPARATOR.'backups';
+        $path = $this->getStoragePath($create) . DIRECTORY_SEPARATOR . 'backups';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -178,7 +229,7 @@ class Path extends Component
      */
     public function getTempPath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'temp';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'temp';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -195,7 +246,7 @@ class Path extends Component
      */
     public function getAssetsPath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'assets';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'assets';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -212,7 +263,7 @@ class Path extends Component
      */
     public function getTempAssetUploadsPath(bool $create = true): string
     {
-        $path = $this->getAssetsPath($create).DIRECTORY_SEPARATOR.'tempuploads';
+        $path = $this->getAssetsPath($create) . DIRECTORY_SEPARATOR . 'tempuploads';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -229,7 +280,7 @@ class Path extends Component
      */
     public function getAssetSourcesPath(bool $create = true): string
     {
-        $path = $this->getAssetsPath($create).DIRECTORY_SEPARATOR.'sources';
+        $path = $this->getAssetsPath($create) . DIRECTORY_SEPARATOR . 'sources';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -246,7 +297,7 @@ class Path extends Component
      */
     public function getImageEditorSourcesPath(bool $create = true): string
     {
-        $path = $this->getAssetsPath($create).DIRECTORY_SEPARATOR.'imageeditor';
+        $path = $this->getAssetsPath($create) . DIRECTORY_SEPARATOR . 'imageeditor';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -263,7 +314,7 @@ class Path extends Component
      */
     public function getAssetThumbsPath(bool $create = true): string
     {
-        $path = $this->getAssetsPath($create).DIRECTORY_SEPARATOR.'thumbs';
+        $path = $this->getAssetsPath($create) . DIRECTORY_SEPARATOR . 'thumbs';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -280,7 +331,7 @@ class Path extends Component
      */
     public function getAssetsIconsPath(bool $create = true): string
     {
-        $path = $this->getAssetsPath($create).DIRECTORY_SEPARATOR.'icons';
+        $path = $this->getAssetsPath($create) . DIRECTORY_SEPARATOR . 'icons';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -297,7 +348,7 @@ class Path extends Component
      */
     public function getPluginIconsPath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'pluginicons';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'pluginicons';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -311,10 +362,11 @@ class Path extends Component
      *
      * @param bool $create Whether the directory should be created if it doesn't exist
      * @return string
+     * @throws Exception
      */
     public function getLogPath(bool $create = true): string
     {
-        $path = $this->getStoragePath($create).DIRECTORY_SEPARATOR.'logs';
+        $path = $this->getStoragePath($create) . DIRECTORY_SEPARATOR . 'logs';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -330,7 +382,7 @@ class Path extends Component
      */
     public function getCpTranslationsPath(): string
     {
-        return Craft::$app->getBasePath().DIRECTORY_SEPARATOR.'translations';
+        return Craft::$app->getBasePath() . DIRECTORY_SEPARATOR . 'translations';
     }
 
     /**
@@ -361,7 +413,7 @@ class Path extends Component
      */
     public function getCpTemplatesPath(): string
     {
-        return Craft::$app->getBasePath().DIRECTORY_SEPARATOR.'templates';
+        return Craft::$app->getBasePath() . DIRECTORY_SEPARATOR . 'templates';
     }
 
     /**
@@ -389,7 +441,7 @@ class Path extends Component
      */
     public function getCompiledClassesPath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'compiled_classes';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'compiled_classes';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -406,7 +458,7 @@ class Path extends Component
      */
     public function getCompiledTemplatesPath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'compiled_templates';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'compiled_templates';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -423,7 +475,7 @@ class Path extends Component
      */
     public function getSessionPath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'sessions';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'sessions';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -443,7 +495,7 @@ class Path extends Component
      */
     public function getCachePath(bool $create = true): string
     {
-        $path = $this->getRuntimePath($create).DIRECTORY_SEPARATOR.'cache';
+        $path = $this->getRuntimePath($create) . DIRECTORY_SEPARATOR . 'cache';
 
         if ($create) {
             FileHelper::createDirectory($path);
@@ -459,6 +511,25 @@ class Path extends Component
      */
     public function getLicenseKeyPath(): string
     {
-        return defined('CRAFT_LICENSE_KEY_PATH') ? CRAFT_LICENSE_KEY_PATH : $this->getConfigPath().DIRECTORY_SEPARATOR.'license.key';
+        return defined('CRAFT_LICENSE_KEY_PATH') ? CRAFT_LICENSE_KEY_PATH : $this->getConfigPath() . DIRECTORY_SEPARATOR . 'license.key';
+    }
+
+    /**
+     * Creates a .gitignore file in the given directory if it doesn’t exist yet
+     *
+     * @param string $path
+     */
+    private function _createGitignore(string $path)
+    {
+        $gitignorePath = $path . DIRECTORY_SEPARATOR . '.gitignore';
+
+        if (is_file($gitignorePath)) {
+            return;
+        }
+
+        FileHelper::writeToFile($gitignorePath, "*\n!.gitignore\n", [
+            // Prevent a segfault if this is called recursively
+            'lock' => false,
+        ]);
     }
 }

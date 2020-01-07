@@ -7,15 +7,15 @@
 namespace clearbold\cmcampaigns;
 
 use clearbold\cmservice\services\CampaignMonitorService;
-// use clearbold\cmlists\variables\CmListsVariable;
+use clearbold\cmlists\variables\CmListsVariable;
 
 use Craft;
 use craft\base\Plugin;
 // use craft\web\UrlManager;
-// use craft\web\twig\variables\CraftVariable;
+use craft\web\twig\variables\CraftVariable;
 // use craft\events\RegisterComponentTypesEvent;
 // use craft\events\RegisterUrlRulesEvent;
-// use yii\base\Event;
+use yii\base\Event;
 
 /**
  * Post your rendered Craft content to your Campaign Monitor account as a new campaign.
@@ -48,15 +48,15 @@ class CmCampaigns extends Plugin
         //     }
         // );
 
-        // Event::on(
-        //     CraftVariable::class,
-        //     CraftVariable::EVENT_INIT,
-        //     function (Event $event) {
-        //         /** @var CraftVariable $variable */
-        //         $variable = $event->sender;
-        //         $variable->set('cmCampaigns', CmCampaignsVariable::class);
-        //     }
-        // );
+        Event::on(
+            CraftVariable::class,
+            CraftVariable::EVENT_INIT,
+            function (Event $event) {
+                /** @var CraftVariable $variable */
+                $variable = $event->sender;
+                $variable->set('cmLists', CmListsVariable::class);
+            }
+        );
 
         Craft::info(
             Craft::t(

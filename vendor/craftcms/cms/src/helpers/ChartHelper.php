@@ -17,7 +17,7 @@ use yii\base\Exception;
  * Class ChartHelper
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class ChartHelper
 {
@@ -78,7 +78,7 @@ class ChartHelper
                 $phpDateFormat = 'Y-m-d H:00:00';
                 break;
             default:
-                throw new Exception('Invalid interval unit: '.$intervalUnit);
+                throw new Exception('Invalid interval unit: ' . $intervalUnit);
         }
 
         // Assemble the data
@@ -89,8 +89,9 @@ class ChartHelper
 
         while ($cursorDate->getTimestamp() < $endTimestamp) {
             $cursorEndDate = clone $cursorDate;
-            $cursorEndDate->modify('+1 '.$intervalUnit);
-            $total = (int)(clone $query)
+            $cursorEndDate->modify('+1 ' . $intervalUnit);
+            $totalQuery = clone $query;
+            $total = (float)$totalQuery
                 ->andWhere(['>=', $dateColumn, Db::prepareDateForDb($cursorDate)])
                 ->andWhere(['<', $dateColumn, Db::prepareDateForDb($cursorEndDate)])
                 ->$func($q);

@@ -16,8 +16,8 @@ use yii\base\Exception;
  * Globals functions.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
- * @deprecated in 3.0
+ * @since 3.0.0
+ * @deprecated in 3.0.0
  */
 class Globals
 {
@@ -94,7 +94,7 @@ class Globals
             $site = Craft::$app->getSites()->getSiteByHandle($siteHandle);
 
             if (!$site) {
-                throw new Exception('Invalid site handle: '.$siteHandle);
+                throw new Exception('Invalid site handle: ' . $siteHandle);
             }
 
             $siteId = $site->id;
@@ -121,7 +121,7 @@ class Globals
             $site = Craft::$app->getSites()->getSiteByHandle($siteHandle);
 
             if (!$site) {
-                throw new Exception('Invalid site handle: '.$siteHandle);
+                throw new Exception('Invalid site handle: ' . $siteHandle);
             }
 
             $siteId = $site->id;

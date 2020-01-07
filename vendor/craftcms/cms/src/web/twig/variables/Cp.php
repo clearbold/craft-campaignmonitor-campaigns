@@ -11,17 +11,19 @@ use Craft;
 use craft\base\Plugin;
 use craft\base\UtilityInterface;
 use craft\events\RegisterCpNavItemsEvent;
+use craft\events\RegisterCpSettingsEvent;
+use craft\helpers\ArrayHelper;
 use craft\helpers\Cp as CpHelper;
 use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
-use GuzzleHttp\Exception\ServerException;
 use yii\base\Component;
+use yii\base\InvalidConfigException;
 
 /**
  * CP functions
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Cp extends Component
 {
@@ -33,22 +35,14 @@ class Cp extends Component
      */
     const EVENT_REGISTER_CP_NAV_ITEMS = 'registerCpNavItems';
 
+    /**
+     * @event RegisterCpSettingsEvent The event that is triggered when registering Control Panel nav items.
+     * @since 3.1.0
+     */
+    const EVENT_REGISTER_CP_SETTINGS = 'registerCpSettings';
+
     // Public Methods
     // =========================================================================
-
-    /**
-     * Returns the Craft ID account.
-     *
-     * @return array|null
-     */
-    public function craftIdAccount()
-    {
-        try {
-            return Craft::$app->getPluginStore()->getCraftIdAccount();
-        } catch (ServerException $e) {
-            return null;
-        }
-    }
 
     /**
      * Returns the Craft ID account URL.
@@ -57,16 +51,55 @@ class Cp extends Component
      */
     public function craftIdAccountUrl()
     {
-        return Craft::$app->getPluginStore()->craftIdEndpoint.'/account';
+        return Craft::$app->getPluginStore()->craftIdEndpoint . '/account';
     }
 
     /**
      * Returns the Control Panel nav items.
      *
+     * Each CP nav item should be defined by an array with the following keys:
+     *
+     * - `label` – The human-facing nav item label
+     * - `url` – The URL the nav item should link to
+     * - `id` – The HTML `id` attribute the nav item should have (optional)
+     * - `icon` – The path to an SVG file that should be used as the nav item icon (optional)
+     * - `fontIcon` – A character/ligature from Craft’s font icon set (optional)
+     * - `badgeCount` – A number that should be displayed beside the nav item when unselected
+     * - `subnav` – A sub-array of subnav items
+     *
+     * Subnav arrays should be associative, with identifiable keys set to sub-arrays with the following keys:
+     *
+     * - `label` – The human-facing subnav item label
+     * - `url` – The URL the subnav item should link to
+     *
+     * For example:
+     *
+     * ```php
+     * [
+     *     'label' => 'Commerce',
+     *     'url' => 'commerce',
+     *     'subnav' => [
+     *         'orders' => ['label' => 'Orders', 'url' => 'commerce/orders',
+     *         'discounts' => ['label' => 'Discounts', 'url' => 'commerce/discounts',
+     *     ],
+     * ]
+     * ```
+     *
+     * Control Panel templates can specify which subnav item is selected by defining a `selectedSubnavItem` variable.
+     *
+     * ```twig
+     * {% set selectedSubnavItem = 'orders' %}
+     * ```
+     *
      * @return array
+     * @throws InvalidConfigException
      */
     public function nav(): array
     {
+        $craftPro = Craft::$app->getEdition() === Craft::Pro;
+        $isAdmin = Craft::$app->getUser()->getIsAdmin();
+        $generalConfig = Craft::$app->getConfig()->getGeneral();
+
         $navItems = [
             [
                 'label' => Craft::t('app', 'Dashboard'),
@@ -107,7 +140,7 @@ class Cp extends Component
             ];
         }
 
-        if (Craft::$app->getEdition() === Craft::Pro && Craft::$app->getUser()->checkPermission('editUsers')) {
+        if ($craftPro && Craft::$app->getUser()->checkPermission('editUsers')) {
             $navItems[] = [
                 'label' => Craft::t('app', 'Users'),
                 'url' => 'users',
@@ -122,7 +155,7 @@ class Cp extends Component
         foreach ($plugins as $plugin) {
             if (
                 $plugin->hasCpSection &&
-                Craft::$app->getUser()->checkPermission('accessPlugin-'.$plugin->id) &&
+                Craft::$app->getUser()->checkPermission('accessPlugin-' . $plugin->id) &&
                 ($pluginNavItem = $plugin->getCpNavItem()) !== null
             ) {
                 $navItems[] = $pluginNavItem;
@@ -147,17 +180,37 @@ class Cp extends Component
             ];
         }
 
-        if (Craft::$app->getUser()->getIsAdmin()) {
-            $navItems[] = [
-                'url' => 'settings',
-                'label' => Craft::t('app', 'Settings'),
-                'fontIcon' => 'settings'
-            ];
-            $navItems[] = [
-                'url' => 'plugin-store',
-                'label' => Craft::t('app', 'Plugin Store'),
-                'fontIcon' => 'plugin'
-            ];
+        if ($isAdmin) {
+            if ($craftPro && $generalConfig->enableGql) {
+                $navItems[] = [
+                    'label' => Craft::t('app', 'GraphQL'),
+                    'url' => 'graphql',
+                    'icon' => '@app/icons/graphql.svg',
+                    'subnav' => [
+                        'explore' => [
+                            'label' => Craft::t('app', 'Explore'),
+                            'url' => 'graphql',
+                        ],
+                        'schemas' => [
+                            'label' => Craft::t('app', 'Schemas'),
+                            'url' => 'graphql/schemas',
+                        ]
+                    ]
+                ];
+            }
+
+            if ($generalConfig->allowAdminChanges) {
+                $navItems[] = [
+                    'url' => 'settings',
+                    'label' => Craft::t('app', 'Settings'),
+                    'fontIcon' => 'settings'
+                ];
+                $navItems[] = [
+                    'url' => 'plugin-store',
+                    'label' => Craft::t('app', 'Plugin Store'),
+                    'fontIcon' => 'plugin'
+                ];
+            }
         }
 
         // Allow plugins to modify the nav
@@ -177,7 +230,7 @@ class Cp extends Component
         $foundSelectedItem = false;
 
         foreach ($navItems as &$item) {
-            if (!$foundSelectedItem && ($item['url'] == $path || StringHelper::startsWith($path, $item['url'].'/'))) {
+            if (!$foundSelectedItem && ($item['url'] == $path || StringHelper::startsWith($path, $item['url'] . '/'))) {
                 $item['sel'] = true;
                 $foundSelectedItem = true;
             } else {
@@ -185,7 +238,7 @@ class Cp extends Component
             }
 
             if (!isset($item['id'])) {
-                $item['id'] = 'nav-'.preg_replace('/[^\w\-_]/', '', $item['url']);
+                $item['id'] = 'nav-' . preg_replace('/[^\w\-_]/', '', $item['url']);
             }
 
             $item['url'] = UrlHelper::url($item['url']);
@@ -217,10 +270,14 @@ class Cp extends Component
             'icon' => '@app/icons/world.svg',
             'label' => Craft::t('app', 'Sites')
         ];
-        $settings[$label]['routes'] = [
-            'icon' => '@app/icons/routes.svg',
-            'label' => Craft::t('app', 'Routes')
-        ];
+
+        if (!Craft::$app->getConfig()->getGeneral()->headlessMode) {
+            $settings[$label]['routes'] = [
+                'icon' => '@app/icons/routes.svg',
+                'label' => Craft::t('app', 'Routes')
+            ];
+        }
+
         $settings[$label]['users'] = [
             'icon' => '@app/icons/users.svg',
             'label' => Craft::t('app', 'Users')
@@ -269,14 +326,20 @@ class Cp extends Component
             /** @var Plugin $plugin */
             if ($plugin->hasCpSettings) {
                 $settings[$label][$plugin->id] = [
-                    'url' => 'settings/plugins/'.$plugin->id,
+                    'url' => 'settings/plugins/' . $plugin->id,
                     'icon' => $pluginsService->getPluginIconSvg($plugin->id),
                     'label' => $plugin->name
                 ];
             }
         }
 
-        return $settings;
+        // Allow plugins to modify the settings
+        $event = new RegisterCpSettingsEvent([
+            'settings' => $settings
+        ]);
+        $this->trigger(self::EVENT_REGISTER_CP_SETTINGS, $event);
+
+        return $event->settings;
     }
 
     /**
@@ -298,5 +361,158 @@ class Cp extends Component
     public function getAlerts(): array
     {
         return CpHelper::alerts(Craft::$app->getRequest()->getPathInfo());
+    }
+
+    /**
+     * Returns the available environment variable and alias suggestions for
+     * inputs that support them.
+     *
+     * @param bool $includeAliases Whether aliases should be included in the list
+     * (only enable this if the setting defines a URL or file path)
+     * @return string[]
+     * @since 3.1.0
+     */
+    public function getEnvSuggestions(bool $includeAliases = false): array
+    {
+        $suggestions = [];
+        $security = Craft::$app->getSecurity();
+
+        $envSuggestions = [];
+        foreach (array_keys($_ENV) as $var) {
+            $envSuggestions[] = [
+                'name' => '$' . $var,
+                'hint' => $security->redactIfSensitive($var, Craft::getAlias(getenv($var), false))
+            ];
+        }
+        ArrayHelper::multisort($envSuggestions, 'name');
+        $suggestions[] = [
+            'label' => Craft::t('app', 'Environment Variables'),
+            'data' => $envSuggestions,
+        ];
+
+        if ($includeAliases) {
+            $aliasSuggestions = [];
+            foreach (Craft::$aliases as $alias => $path) {
+                if (is_array($path)) {
+                    if (isset($path[$alias])) {
+                        $aliasSuggestions[] = [
+                            'name' => $alias,
+                            'hint' => $path[$alias],
+                        ];
+                    }
+                } else {
+                    $aliasSuggestions[] = [
+                        'name' => $alias,
+                        'hint' => $path,
+                    ];
+                }
+            }
+            ArrayHelper::multisort($aliasSuggestions, 'name');
+            $suggestions[] = [
+                'label' => Craft::t('app', 'Aliases'),
+                'data' => $aliasSuggestions,
+            ];
+        }
+
+        return $suggestions;
+    }
+
+    /**
+     * Returns ASCII character mappings for the given language, if it differs from the application language.
+     *
+     * @param string $language
+     * @return array|null
+     * @since 3.1.9
+     */
+    public function getAsciiCharMap(string $language)
+    {
+        if ($language === Craft::$app->language) {
+            return null;
+        }
+
+        return StringHelper::asciiCharMap(true, $language);
+    }
+
+    /**
+     * Returns the available template path suggestions for template inputs.
+     *
+     * @return string[]
+     * @since 3.1.0
+     */
+    public function getTemplateSuggestions(): array
+    {
+        // Get all the template files sorted by path length
+        $root = Craft::$app->getPath()->getSiteTemplatesPath();
+
+        if (!is_dir($root)) {
+            return [];
+        }
+
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root));
+        /** @var \SplFileInfo[] $files */
+        $files = [];
+        $pathLengths = [];
+
+        foreach ($iterator as $file) {
+            /** @var \SplFileInfo $file */
+            if (!$file->isDir() && $file->getFilename()[0] !== '.') {
+                $files[] = $file;
+                $pathLengths[] = strlen($file->getRealPath());
+            }
+        }
+
+        array_multisort($pathLengths, SORT_NUMERIC, $files);
+
+        // Now build the suggestions array
+        $suggestions = [];
+        $templates = [];
+        $sites = [];
+        $config = Craft::$app->getConfig()->getGeneral();
+        $rootLength = strlen($root);
+
+        foreach (Craft::$app->getSites()->getAllSites() as $site) {
+            $sites[$site->handle] = Craft::t('site', $site->name);
+        }
+
+        foreach ($files as $file) {
+            $template = substr($file->getRealPath(), $rootLength + 1);
+
+            // Can we chop off the extension?
+            $extension = $file->getExtension();
+            if (in_array($extension, $config->defaultTemplateExtensions, true)) {
+                $template = substr($template, 0, strlen($template) - (strlen($extension) + 1));
+            }
+
+            $hint = null;
+
+            // Is it in a site template directory?
+            foreach ($sites as $handle => $name) {
+                if (strpos($template, $handle . DIRECTORY_SEPARATOR) === 0) {
+                    $hint = $name;
+                    $template = substr($template, strlen($handle) + 1);
+                    break;
+                }
+            }
+
+            // Avoid listing the same template path twice (considering localized templates)
+            if (isset($templates[$template])) {
+                continue;
+            }
+
+            $templates[$template] = true;
+            $suggestions[] = [
+                'name' => $template,
+                'hint' => $hint,
+            ];
+        }
+
+        ArrayHelper::multisort($suggestions, 'name');
+
+        return [
+            [
+                'label' => Craft::t('app', 'Templates'),
+                'data' => $suggestions,
+            ]
+        ];
     }
 }

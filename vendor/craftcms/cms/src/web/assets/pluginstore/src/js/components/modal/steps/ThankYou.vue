@@ -1,38 +1,32 @@
 <template>
-	<step>
-		<template slot="main">
-			<div id="thank-you-message">
-				<div id="graphic" class="spinner big success"></div>
-				<h2>{{ "Thank You!"|t('app') }}</h2>
-				<p class="light">{{ "Your order has been processed successfully."|t('app') }}</p>
-				<p>
-					<a :href="managePluginsUrl" class="btn submit">{{ "Manage plugins"|t('app') }}</a>
-				</p>
-			</div>
-		</template>
-	</step>
+    <step>
+        <template slot="main">
+            <div id="thank-you-message">
+                <icon icon="check-circle" size="4xl" />
+                <h2>{{ "Thank You!"|t('app') }}</h2>
+                <p class="light">{{ "Your order has been processed successfully."|t('app') }}</p>
+                <div class="mt-6">
+                    <btn kind="primary" :href="managePluginsUrl">{{ "Manage plugins"|t('app') }}</btn>
+                </div>
+            </div>
+        </template>
+    </step>
 </template>
 
 <script>
-    import {mapState} from 'vuex'
+    /* global Craft */
+
+    import Step from '../Step'
 
     export default {
-
         components: {
-            Step: require('../Step'),
+            Step,
         },
 
         computed: {
-
-            ...mapState({
-                craftLogo: state => state.craft.craftLogo,
-            }),
-
             managePluginsUrl() {
                 return Craft.getCpUrl('settings/plugins')
             }
-
         },
-
     }
 </script>

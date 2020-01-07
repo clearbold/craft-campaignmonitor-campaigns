@@ -8,6 +8,7 @@
 namespace craft\controllers;
 
 use Craft;
+use craft\helpers\App;
 use craft\queue\QueueInterface;
 use craft\web\Controller;
 use yii\web\BadRequestHttpException;
@@ -20,7 +21,7 @@ use yii\web\ServerErrorHttpException;
  * The QueueController class is a controller that handles various queue-related operations.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class QueueController extends Controller
 {
@@ -47,7 +48,7 @@ class QueueController extends Controller
 
         // Make sure the queue uses our interface
         if (!Craft::$app->getQueue() instanceof QueueInterface) {
-            throw new ServerErrorHttpException('The queue class '.get_class(Craft::$app->getQueue()).' doesn’t support web-based runners.');
+            throw new ServerErrorHttpException('The queue class ' . get_class(Craft::$app->getQueue()) . ' doesn’t support web-based runners.');
         }
 
         return true;
@@ -81,6 +82,7 @@ class QueueController extends Controller
         }
 
         // Run the queue
+        App::maxPowerCaptain();
         $queue->run();
 
         return $response;
@@ -91,6 +93,7 @@ class QueueController extends Controller
      *
      * @return Response
      * @throws BadRequestHttpException
+     * @since 3.1.21
      */
     public function actionRetry(): Response
     {

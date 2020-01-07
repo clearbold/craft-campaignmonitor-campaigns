@@ -8,6 +8,7 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\Table;
 
 /**
  * Class AssetTransform record.
@@ -24,7 +25,7 @@ use craft\db\ActiveRecord;
  * @property int $quality Quality
  * @property \DateTime $dimensionChangeTime Dimension change time
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class AssetTransform extends ActiveRecord
 {
@@ -37,6 +38,6 @@ class AssetTransform extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%assettransforms}}';
+        return Table::ASSETTRANSFORMS;
     }
 }

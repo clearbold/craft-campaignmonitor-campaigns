@@ -14,7 +14,7 @@ use craft\base\Model;
  * URL model.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Url extends Model
 {
@@ -44,9 +44,9 @@ class Url extends Model
      */
     public function rules()
     {
-        return [
-            [['url'], 'required'],
-            [['url'], 'url'],
-        ];
+        $rules = parent::rules();
+        $rules[] = [['url'], 'required'];
+        $rules[] = [['url'], 'url'];
+        return $rules;
     }
 }

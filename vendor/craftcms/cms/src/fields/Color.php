@@ -20,7 +20,7 @@ use yii\db\Schema;
  * Color represents a Color field.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Color extends Field implements PreviewableFieldInterface
 {
@@ -33,6 +33,14 @@ class Color extends Field implements PreviewableFieldInterface
     public static function displayName(): string
     {
         return Craft::t('app', 'Color');
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public static function valueType(): string
+    {
+        return ColorData::class . '|null';
     }
 
     // Properties
@@ -51,7 +59,7 @@ class Color extends Field implements PreviewableFieldInterface
      */
     public function getContentColumnType(): string
     {
-        return Schema::TYPE_STRING.'(7)';
+        return Schema::TYPE_STRING . '(7)';
     }
 
     public function getSettingsHtml()
@@ -149,7 +157,7 @@ class Color extends Field implements PreviewableFieldInterface
             return '<div class="color small static"><div class="color-preview"></div></div>';
         }
 
-        return "<div class='color small static'><div class='color-preview' style='background-color: {$value->getHex()};'></div></div>".
+        return "<div class='color small static'><div class='color-preview' style='background-color: {$value->getHex()};'></div></div>" .
             "<div class='colorhex code'>{$value->getHex()}</div>";
     }
 }

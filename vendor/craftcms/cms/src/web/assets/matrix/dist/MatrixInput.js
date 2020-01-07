@@ -120,6 +120,8 @@
 
                 this.addListener(this.$container, 'resize', 'setNewBlockBtn');
                 Garnish.$doc.ready($.proxy(this, 'setNewBlockBtn'));
+
+                this.trigger('afterInit');
             },
 
             setNewBlockBtn: function() {
@@ -258,6 +260,10 @@
 
                 $(bodyHtml).appendTo($fieldsContainer);
 
+                this.trigger('blockAdded', {
+                    $block: $block
+                });
+
                 // Animate the block into position
                 $block.css(this.getHiddenBlockCss($block)).velocity({
                     opacity: 1,
@@ -274,6 +280,9 @@
                     Garnish.requestAnimationFrame(function() {
                         // Scroll to the block
                         Garnish.scrollContainerToElement($block);
+
+                        // Focus on the first text input
+                        $block.find('.text:first').trigger('focus');
                     });
                 }, this));
             },
@@ -532,8 +541,9 @@
                 this.$container.height('auto');
                 this.$fieldsContainer.show();
                 var expandedContainerHeight = this.$container.height();
+                var displayValue = this.$fieldsContainer.css('display') || 'block';
                 this.$container.height(collapsedContainerHeight);
-                this.$fieldsContainer.hide().velocity('fadeIn', {duration: 'fast'});
+                this.$fieldsContainer.hide().velocity('fadeIn', {duration: 'fast', display: displayValue});
                 this.$container.velocity({height: expandedContainerHeight}, 'fast', $.proxy(function() {
                     this.$previewContainer.html('');
                     this.$container.height('auto');
@@ -662,6 +672,10 @@
                 this.$container.velocity(this.matrix.getHiddenBlockCss(this.$container), 'fast', $.proxy(function() {
                     this.$container.remove();
                     this.matrix.updateAddBlockBtn();
+
+                    if (window.draftEditor) {
+                        window.draftEditor.checkForm();
+                    }
                 }, this));
             }
         });

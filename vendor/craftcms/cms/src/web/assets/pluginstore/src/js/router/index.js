@@ -1,19 +1,27 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
-import Index from '../pages/Index'
-import Category from '../pages/Category'
-import UpgradeCraft from '../pages/UpgradeCraft'
-import Developer from '../pages/Developer'
-import FeaturedPlugins from '../pages/FeaturedPlugins'
-import Buy from '../pages/Buy'
-import Tests from '../pages/Tests'
-import NotFound from '../pages/NotFound'
+import Index from '../pages/index'
+import CategoriesId from '../pages/categories/_id'
+import UpgradeCraft from '../pages/upgrade-craft'
+import DeveloperId from '../pages/developer/_id'
+import FeaturedHandle from '../pages/featured/_handle'
+import BuyPlugin from '../pages/buy/_plugin'
+import Tests from '../pages/tests'
+import NotFound from '../pages/_not-found'
+import Search from '../pages/search'
+import PluginsHandle from '../pages/_handle'
 
 Vue.use(VueRouter)
 
 export default new VueRouter({
     base: window.pluginStoreAppBaseUrl,
+
     mode: 'history',
+
+    scrollBehavior () {
+        return { x: 0, y: 0 }
+    },
+
     routes: [
         {
             path: '/',
@@ -21,14 +29,9 @@ export default new VueRouter({
             component: Index,
         },
         {
-            path: '/plugin/:pluginHandle',
-            name: 'Plugin',
-            component: Index
-        },
-        {
             path: '/categories/:id',
-            name: 'Category',
-            component: Category,
+            name: 'CategoriesId',
+            component: CategoriesId,
         },
         {
             path: '/upgrade-craft',
@@ -37,23 +40,38 @@ export default new VueRouter({
         },
         {
             path: '/developer/:id',
-            name: 'Developer',
-            component: Developer,
+            name: 'DeveloperId',
+            component: DeveloperId,
         },
         {
-            path: '/featured/:id',
-            name: 'FeaturedPlugins',
-            component: FeaturedPlugins,
+            path: '/featured/:handle',
+            name: 'FeaturedHandle',
+            component: FeaturedHandle,
         },
         {
-            path: '/buy/:pluginHandle',
-            name: 'Buy',
-            component: Buy,
+            path: '/buy/:plugin',
+            name: 'BuyPlugin',
+            component: BuyPlugin,
+        },
+        {
+            path: '/buy/:plugin/:edition',
+            name: 'BuyPlugin',
+            component: BuyPlugin,
+        },
+        {
+            path: '/search',
+            name: 'Search',
+            component: Search,
         },
         {
             path: '/tests',
             name: 'Tests',
             component: Tests,
+        },
+        {
+            path: '/:handle',
+            name: 'PluginsHandle',
+            component: PluginsHandle,
         },
         {
             path: '*',

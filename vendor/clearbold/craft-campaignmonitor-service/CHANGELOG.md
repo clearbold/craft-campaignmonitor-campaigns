@@ -1,6 +1,14 @@
-## 1.0.4 - 2018-04-29
+## 1.0.8 - 2019-04-26
 
-* Added support for subscribers/unsubscribe method.
+* Bug fix for subscribers/update method.
+
+## 1.0.7 - 2019-04-26
+
+* Added support for subscribers/update method.
+
+## 1.0.6 - 2018-06-10
+
+* Added support for campaign create method.
 
 ## 1.0.3 - 2018-04-29
 

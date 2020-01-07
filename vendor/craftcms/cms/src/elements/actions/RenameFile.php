@@ -15,7 +15,7 @@ use craft\helpers\Json;
  * RenameFile represents a Rename File element action.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class RenameFile extends ElementAction
 {
@@ -64,11 +64,9 @@ class RenameFile extends ElementAction
 
             Craft.elementIndex.setIndexBusy();
 
-            var sourcePath = Craft.elementIndex.\$source.data('key').split('/');
-            var assetSourceKey = sourcePath.pop();
             var data = {
                 assetId:   assetId,
-                folderId: assetSourceKey.split(':')[1],
+                folderId: Craft.elementIndex.\$source.data('folder-id'),
                 filename: newName
             };
 

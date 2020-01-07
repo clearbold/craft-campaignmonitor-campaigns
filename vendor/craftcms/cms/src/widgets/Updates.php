@@ -15,7 +15,7 @@ use craft\web\assets\updateswidget\UpdatesWidgetAsset;
  * Updates represents an Updates dashboard widget.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Updates extends Widget
 {
@@ -50,7 +50,7 @@ class Updates extends Widget
     /**
      * @inheritdoc
      */
-    public static function iconPath()
+    public static function icon()
     {
         return Craft::getAlias('@app/icons/excite.svg');
     }
@@ -73,7 +73,7 @@ class Updates extends Widget
 
         if (!$cached || !Craft::$app->getUpdates()->getTotalAvailableUpdates()) {
             $view->registerAssetBundle(UpdatesWidgetAsset::class);
-            $view->registerJs('new Craft.UpdatesWidget('.$this->id.', '.($cached ? 'true' : 'false').');');
+            $view->registerJs('new Craft.UpdatesWidget(' . $this->id . ', ' . ($cached ? 'true' : 'false') . ');');
         }
 
         if ($cached) {
@@ -83,6 +83,6 @@ class Updates extends Widget
                 ]);
         }
 
-        return '<p class="centeralign">'.Craft::t('app', 'Checking for updates…').'</p>';
+        return '<p class="centeralign">' . Craft::t('app', 'Checking for updates…') . '</p>';
     }
 }

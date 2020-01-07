@@ -16,7 +16,7 @@ use yii\db\ColumnSchemaBuilder;
  * @property Connection $db the DB connection that this command is associated with
  * @method Connection getDb() returns the connection the DB connection that this command is associated with
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 abstract class Migration extends \yii\db\Migration
 {
@@ -25,11 +25,13 @@ abstract class Migration extends \yii\db\Migration
 
     /**
      * @event \yii\base\Event The event that is triggered after the migration is executed
+     * @since 3.0.6
      */
     const EVENT_AFTER_UP = 'afterUp';
 
     /**
      * @event \yii\base\Event The event that is triggered after the migration is reverted
+     * @since 3.0.6
      */
     const EVENT_AFTER_DOWN = 'afterDown';
 
@@ -110,16 +112,6 @@ abstract class Migration extends \yii\db\Migration
         }
 
         return null;
-    }
-
-    /**
-     * @param \Throwable|\Exception $e
-     */
-    private function _printException($e)
-    {
-        // Copied from \yii\db\Migration::printException(), only because it’s private
-        echo 'Exception: '.$e->getMessage().' ('.$e->getFile().':'.$e->getLine().")\n";
-        echo $e->getTraceAsString()."\n";
     }
 
     // Schema Builder Methods
@@ -222,7 +214,7 @@ abstract class Migration extends \yii\db\Migration
         $this->db->createCommand()
             ->insert($table, $columns, $includeAuditColumns)
             ->execute();
-        echo ' done (time: '.sprintf('%.3f', microtime(true) - $time)."s)\n";
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
     }
 
     /**
@@ -242,7 +234,7 @@ abstract class Migration extends \yii\db\Migration
         $this->db->createCommand()
             ->batchInsert($table, $columns, $rows, $includeAuditColumns)
             ->execute();
-        echo ' done (time: '.sprintf('%.3f', microtime(true) - $time)."s)\n";
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
     }
 
     /**
@@ -255,7 +247,6 @@ abstract class Migration extends \yii\db\Migration
      * If `false` is passed, no update will be performed if the column data already exists.
      * @param array $params the parameters to be bound to the command.
      * @param bool $includeAuditColumns Whether `dateCreated`, `dateUpdated`, and `uid` values should be added to $columns.
-     * @return $this the command object itself.
      * @since 2.0.14
      */
     public function upsert($table, $insertColumns, $updateColumns = true, $params = [], bool $includeAuditColumns = true)
@@ -290,7 +281,7 @@ abstract class Migration extends \yii\db\Migration
         $this->db->createCommand()
             ->update($table, $columns, $condition, $params, $includeAuditColumns)
             ->execute();
-        echo ' done (time: '.sprintf('%.3f', microtime(true) - $time)."s)\n";
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
     }
 
     /**
@@ -311,7 +302,7 @@ abstract class Migration extends \yii\db\Migration
         $this->db->createCommand()
             ->replace($table, $column, $find, $replace, $condition, $params)
             ->execute();
-        echo ' done (time: '.sprintf('%.3f', microtime(true) - $time)."s)\n";
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
     }
 
     // Schema Manipulation Methods
@@ -329,7 +320,7 @@ abstract class Migration extends \yii\db\Migration
         $this->db->createCommand()
             ->dropTableIfExists($table)
             ->execute();
-        echo ' done (time: '.sprintf('%.3f', microtime(true) - $time)."s)\n";
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
     }
 
     /**
@@ -345,7 +336,7 @@ abstract class Migration extends \yii\db\Migration
         $this->db->createCommand()
             ->renameSequence($oldName, $newName)
             ->execute();
-        echo ' done (time: '.sprintf('%.3f', microtime(true) - $time)."s)\n";
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
     }
 
     /**
@@ -398,5 +389,56 @@ abstract class Migration extends \yii\db\Migration
         }
 
         return parent::createIndex($name, $table, $columns, $unique);
+    }
+
+    /**
+     * Creates and executes a SQL statement for soft-deleting a row.
+     *
+     * @param string $table The table to be updated.
+     * @param string|array $condition The condition that will be put in the WHERE part. Please
+     * refer to [[Query::where()]] on how to specify condition.
+     * @param array $params The parameters to be bound to the command.
+     * @since 3.1.0
+     */
+    public function softDelete(string $table, $condition = '', array $params = [])
+    {
+        echo "    > soft delete from $table ...";
+        $time = microtime(true);
+        $this->db->createCommand()
+            ->softDelete($table, $condition, $params)
+            ->execute();
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
+    }
+
+    /**
+     * Creates and executes a SQL statement for restoring a soft-deleted row.
+     *
+     * @param string $table The table to be updated.
+     * @param string|array $condition The condition that will be put in the WHERE part. Please
+     * refer to [[Query::where()]] on how to specify condition.
+     * @param array $params The parameters to be bound to the command.
+     * @since 3.1.0
+     */
+    public function restore(string $table, $condition = '', array $params = [])
+    {
+        echo "    > restore from $table ...";
+        $time = microtime(true);
+        $this->db->createCommand()
+            ->restore($table, $condition, $params)
+            ->execute();
+        echo ' done (time: ' . sprintf('%.3f', microtime(true) - $time) . "s)\n";
+    }
+
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * @param \Throwable|\Exception $e
+     */
+    private function _printException($e)
+    {
+        // Copied from \yii\db\Migration::printException(), only because it’s private
+        echo 'Exception: ' . $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ")\n";
+        echo $e->getTraceAsString() . "\n";
     }
 }

@@ -8,11 +8,9 @@
 namespace craft\controllers;
 
 use Craft;
-use craft\base\Element;
-use craft\base\ElementInterface;
-use craft\base\Field;
 use craft\base\UtilityInterface;
 use craft\db\Query;
+use craft\db\Table;
 use craft\elements\Asset;
 use craft\errors\MigrationException;
 use craft\helpers\FileHelper;
@@ -57,7 +55,7 @@ class UtilitiesController extends Controller
         /** @var string|UtilityInterface $firstUtility */
         $firstUtility = reset($utilities);
 
-        return $this->redirect('utilities/'.$firstUtility::id());
+        return $this->redirect('utilities/' . $firstUtility::id());
     }
 
     /**
@@ -74,12 +72,12 @@ class UtilitiesController extends Controller
         $utilitiesService = Craft::$app->getUtilities();
 
         if (($class = $utilitiesService->getUtilityTypeById($id)) === null) {
-            throw new NotFoundHttpException('Invalid utility ID: '.$id);
+            throw new NotFoundHttpException('Invalid utility ID: ' . $id);
         }
 
         /** @var UtilityInterface $class */
         if ($utilitiesService->checkAuthorization($class) === false) {
-            throw new ForbiddenHttpException('User not permitted to access the "'.$class::displayName().'".');
+            throw new ForbiddenHttpException('User not permitted to access the "' . $class::displayName() . '".');
         }
 
         $this->getView()->registerAssetBundle(UtilitiesAsset::class);
@@ -96,7 +94,7 @@ class UtilitiesController extends Controller
      * View stack trace for a deprecator log entry.
      *
      * @return Response
-     * @throws ForbiddenHttpException if the user doesn't have access to the Deprecation Errors utility
+     * @throws ForbiddenHttpException if the user doesn't have access to the Deprecation Warnings utility
      */
     public function actionGetDeprecationErrorTracesModal(): Response
     {
@@ -118,7 +116,7 @@ class UtilitiesController extends Controller
      * Deletes all deprecation errors.
      *
      * @return Response
-     * @throws ForbiddenHttpException if the user doesn't have access to the Deprecation Errors utility
+     * @throws ForbiddenHttpException if the user doesn't have access to the Deprecation Warnings utility
      */
     public function actionDeleteAllDeprecationErrors(): Response
     {
@@ -137,7 +135,7 @@ class UtilitiesController extends Controller
      * Deletes a deprecation error.
      *
      * @return Response
-     * @throws ForbiddenHttpException if the user doesn't have access to the Deprecation Errors utility
+     * @throws ForbiddenHttpException if the user doesn't have access to the Deprecation Warnings utility
      */
     public function actionDeleteDeprecationError(): Response
     {
@@ -167,8 +165,13 @@ class UtilitiesController extends Controller
 
         // Initial request
         if (!empty($params['start'])) {
-            $batches = [];
+
             $sessionId = Craft::$app->getAssetIndexer()->getIndexingSessionId();
+
+            $response = [
+                'volumes' => [],
+                'sessionId' => $sessionId
+            ];
 
             // Selection of volumes or all volumes?
             if (is_array($params['volumes'])) {
@@ -179,7 +182,6 @@ class UtilitiesController extends Controller
 
             $missingFolders = [];
             $skippedFiles = [];
-            $grandTotal = 0;
 
             foreach ($volumeIds as $volumeId) {
                 // Get the indexing list
@@ -197,39 +199,18 @@ class UtilitiesController extends Controller
                     $skippedFiles = $indexList['skippedFiles'];
                 }
 
-                $batch = [];
-
-                for ($i = 0; $i < $indexList['total']; $i++) {
-                    $batch[] = [
-                        'params' => [
-                            'sessionId' => $sessionId,
-                            'volumeId' => $volumeId,
-                            'total' => $indexList['total'],
-                            'process' => 1,
-                            'cacheImages' => $params['cacheImages']
-                        ]
-                    ];
-                }
-
-                $batches[] = $batch;
+                $response['volumes'][] = [
+                    'volumeId' => $volumeId,
+                    'total' => $indexList['total'],
+                ];
             }
-
-            $batches[] = [
-                [
-                    'params' => [
-                        'overview' => true,
-                        'sessionId' => $sessionId,
-                    ]
-                ]
-            ];
 
             Craft::$app->getSession()->set('assetsVolumesBeingIndexed', $volumeIds);
             Craft::$app->getSession()->set('assetsMissingFolders', $missingFolders);
             Craft::$app->getSession()->set('assetsSkippedFiles', $skippedFiles);
 
             return $this->asJson([
-                'batches' => $batches,
-                'total' => $grandTotal
+                'indexingData' => $response,
             ]);
         }
 
@@ -247,57 +228,40 @@ class UtilitiesController extends Controller
             $missingFolders = Craft::$app->getSession()->get('assetsMissingFolders', []);
             $skippedFiles = Craft::$app->getSession()->get('assetsSkippedFiles', []);
 
-            $responseArray = [];
-
             if (!empty($missingFiles) || !empty($missingFolders) || !empty($skippedFiles)) {
-                $responseArray['confirm'] = $this->getView()->renderTemplate('assets/_missing_items',
-                    [
-                        'missingFiles' => $missingFiles,
-                        'missingFolders' => $missingFolders,
-                        'skippedFiles' => $skippedFiles
-                    ]);
-                $responseArray['params'] = ['finish' => 1];
+                return $this->asJson([
+                    'confirm' => $this->getView()->renderTemplate('assets/_missing_items', compact('missingFiles', 'missingFolders', 'skippedFiles')),
+                ]);
             }
 
             // Clean up stale indexing data (all sessions that have all recordIds set)
             $sessionsInProgress = (new Query())
                 ->select(['sessionId'])
-                ->from(['{{%assetindexdata}}'])
+                ->from([Table::ASSETINDEXDATA])
                 ->where(['recordId' => null])
                 ->groupBy(['sessionId'])
                 ->scalar();
 
             if (empty($sessionsInProgress)) {
                 Craft::$app->getDb()->createCommand()
-                    ->delete('{{%assetindexdata}}')
+                    ->delete(Table::ASSETINDEXDATA)
                     ->execute();
             } else {
                 Craft::$app->getDb()->createCommand()
                     ->delete(
-                        '{{%assetindexdata}}',
+                        Table::ASSETINDEXDATA,
                         ['not', ['sessionId' => $sessionsInProgress]])
                     ->execute();
-            }
-
-            if (!empty($responseArray)) {
-                return $this->asJson([
-                    'batches' => [
-                        [
-                            $responseArray
-                        ]
-                    ]
-                ]);
             }
         } else if (!empty($params['finish'])) {
             if (!empty($params['deleteAsset']) && is_array($params['deleteAsset'])) {
                 Craft::$app->getDb()->createCommand()
-                    ->delete('{{%assettransformindex}}', ['assetId' => $params['deleteAsset']])
+                    ->delete(Table::ASSETTRANSFORMINDEX, ['assetId' => $params['deleteAsset']])
                     ->execute();
 
                 /** @var Asset[] $assets */
                 $assets = Asset::find()
-                    ->status(null)
-                    ->enabledForSite(false)
+                    ->anyStatus()
                     ->id($params['deleteAsset'])
                     ->all();
 
@@ -310,13 +274,11 @@ class UtilitiesController extends Controller
             if (!empty($params['deleteFolder']) && is_array($params['deleteFolder'])) {
                 Craft::$app->getAssets()->deleteFoldersByIds($params['deleteFolder'], false);
             }
-
-            return $this->asJson([
-                'finished' => 1
-            ]);
         }
 
-        return $this->asJson([]);
+        return $this->asJson([
+            'finished' => 1
+        ]);
     }
 
     /**
@@ -350,7 +312,7 @@ class UtilitiesController extends Controller
                 } catch (InvalidArgumentException $e) {
                     // the directory doesn't exist
                 } catch (\Throwable $e) {
-                    Craft::warning("Could not clear the directory {$action}: ".$e->getMessage(), __METHOD__);
+                    Craft::warning("Could not clear the directory {$action}: " . $e->getMessage(), __METHOD__);
                 }
             } else if (isset($cacheOption['params'])) {
                 call_user_func_array($action, $cacheOption['params']);
@@ -375,44 +337,42 @@ class UtilitiesController extends Controller
     {
         $this->requirePermission('utility:db-backup');
 
-        $params = Craft::$app->getRequest()->getRequiredBodyParam('params');
-
         try {
             $backupPath = Craft::$app->getDb()->backup();
         } catch (\Throwable $e) {
-            throw new Exception('Could not create backup: '.$e->getMessage());
+            throw new Exception('Could not create backup: ' . $e->getMessage());
         }
 
         if (!is_file($backupPath)) {
             throw new Exception("Could not create backup: the backup file doesn't exist.");
         }
 
-        if (empty($params['downloadBackup'])) {
+        if (!Craft::$app->getRequest()->getBodyParam('downloadBackup')) {
             return $this->asJson(['success' => true]);
         }
 
-        $zipPath = Craft::$app->getPath()->getTempPath().DIRECTORY_SEPARATOR.pathinfo($backupPath, PATHINFO_FILENAME).'.zip';
+        $zipPath = Craft::$app->getPath()->getTempPath() . DIRECTORY_SEPARATOR . pathinfo($backupPath, PATHINFO_FILENAME) . '.zip';
 
         if (is_file($zipPath)) {
             try {
                 FileHelper::unlink($zipPath);
             } catch (ErrorException $e) {
-                Craft::warning("Unable to delete the file \"{$zipPath}\": ".$e->getMessage(), __METHOD__);
+                Craft::warning("Unable to delete the file \"{$zipPath}\": " . $e->getMessage(), __METHOD__);
             }
         }
 
         $zip = new ZipArchive();
 
         if ($zip->open($zipPath, ZipArchive::CREATE) !== true) {
-            throw new Exception('Cannot create zip at '.$zipPath);
+            throw new Exception('Cannot create zip at ' . $zipPath);
         }
 
         $filename = pathinfo($backupPath, PATHINFO_BASENAME);
         $zip->addFile($backupPath, $filename);
         $zip->close();
 
-        return $this->asJson([
-            'backupFile' => pathinfo($filename, PATHINFO_FILENAME)
+        return Craft::$app->getResponse()->sendFile($zipPath, null, [
+            'mimeType' => 'application/zip',
         ]);
     }
 
@@ -428,7 +388,7 @@ class UtilitiesController extends Controller
         $this->requirePermission('utility:db-backup');
 
         $filename = Craft::$app->getRequest()->getRequiredQueryParam('filename');
-        $filePath = Craft::$app->getPath()->getTempPath().DIRECTORY_SEPARATOR.$filename.'.zip';
+        $filePath = Craft::$app->getPath()->getTempPath() . DIRECTORY_SEPARATOR . $filename . '.zip';
 
         if (!is_file($filePath) || !Path::ensurePathIsContained($filePath)) {
             throw new NotFoundHttpException(Craft::t('app', 'Invalid backup name: {filename}', [
@@ -456,84 +416,6 @@ class UtilitiesController extends Controller
                 'find' => $params['find'],
                 'replace' => $params['replace'],
             ]));
-        }
-
-        return $this->asJson([
-            'success' => true
-        ]);
-    }
-
-    /**
-     * Performs a Search Index action
-     *
-     * @return Response
-     * @throws ForbiddenHttpException if the user doesn't have access to the Search Indexes utility
-     */
-    public function actionSearchIndexPerformAction(): Response
-    {
-        $this->requirePermission('utility:search-indexes');
-
-        $params = Craft::$app->getRequest()->getRequiredBodyParam('params');
-
-        if (!empty($params['start'])) {
-            // Truncate the searchindex table
-            Craft::$app->getDb()->createCommand()
-                ->truncateTable('{{%searchindex}}')
-                ->execute();
-
-            // Get all the element IDs ever
-            $elements = (new Query())
-                ->select(['id', 'type'])
-                ->from(['{{%elements}}'])
-                ->all();
-
-            $batch = [];
-
-            foreach ($elements as $element) {
-                $batch[] = ['params' => $element];
-            }
-
-            return $this->asJson([
-                'batches' => [$batch]
-            ]);
-        }
-
-        /** @var ElementInterface $class */
-        $class = $params['type'];
-
-        if ($class::isLocalized()) {
-            $siteIds = Craft::$app->getSites()->getAllSiteIds();
-        } else {
-            $siteIds = [Craft::$app->getSites()->getPrimarySite()->id];
-        }
-
-        $query = $class::find()
-            ->id($params['id'])
-            ->status(null)
-            ->enabledForSite(false);
-
-        foreach ($siteIds as $siteId) {
-            $query->siteId($siteId);
-            $element = $query->one();
-
-            if ($element) {
-                /** @var Element $element */
-                Craft::$app->getSearch()->indexElementAttributes($element);
-
-                if ($class::hasContent() && ($fieldLayout = $element->getFieldLayout()) !== null) {
-                    $keywords = [];
-
-                    foreach ($fieldLayout->getFields() as $field) {
-                        /** @var Field $field */
-                        // Set the keywords for the content's site
-                        $fieldValue = $element->getFieldValue($field->handle);
-                        $fieldSearchKeywords = $field->getSearchKeywords($fieldValue, $element);
-                        $keywords[$field->id] = $fieldSearchKeywords;
-                    }
-
-                    Craft::$app->getSearch()->indexElementFields($element->id, $siteId, $keywords);
-                }
-            }
         }
 
         return $this->asJson([

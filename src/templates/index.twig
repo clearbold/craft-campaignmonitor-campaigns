@@ -1,3 +1,38 @@
 {% extends "_layouts/cp" %}
 
 {% set title = "Campaign Monitor Campaigns"|t('app') %}
+{% import "_includes/forms" as forms %}
+
+{% block content %}
+<form id="clearbold-cm-campaigns" class="utility" method="post" accept-charset="UTF-8">
+    {{ csrfInput() }}
+    <input type="hidden" name="action" value="cm-campaigns/campaigns" />
+
+{% set response = craft.cmLists.getLists() %}
+{% if response %}
+
+{% if response.success %}
+
+{% if response.statusCode == 200 %}
+    {% set listsOptions = [] %}
+    {% for list in response.body %}
+        {% set listsOptions = listsOptions|merge([{ label: list.Name|t('site'), value: list.ListID }]) %}
+    {% endfor %}
+    {{ forms.multiselectField({
+        label: "List(s)"|t('app'),
+        instructions: "Select the lists you&rsquo;d like to send this campaign to.",
+        id: 'listID',
+        name: 'listID',
+        options: listsOptions
+    }) }}
+{% endif %}
+
+{% endif %}
+
+{% endif %}
+
+    <div class="buttons">
+        <input type="submit" class="btn submit" value="Post Campaign" />
+    </div>
+</form>
+{% endblock content %}

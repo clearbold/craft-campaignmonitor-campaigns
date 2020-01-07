@@ -8,6 +8,7 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\Table;
 use yii\db\ActiveQueryInterface;
 
 /**
@@ -19,7 +20,7 @@ use yii\db\ActiveQueryInterface;
  * @property UserPermission $permission Permission
  * @property UserGroup $group Group
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class UserPermission_UserGroup extends ActiveRecord
 {
@@ -42,7 +43,7 @@ class UserPermission_UserGroup extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%userpermissions_usergroups}}';
+        return Table::USERPERMISSIONS_USERGROUPS;
     }
 
     /**

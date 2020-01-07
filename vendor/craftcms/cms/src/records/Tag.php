@@ -8,6 +8,7 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\Table;
 use yii\db\ActiveQueryInterface;
 
 /**
@@ -18,7 +19,7 @@ use yii\db\ActiveQueryInterface;
  * @property Element $element Element
  * @property TagGroup $group Group
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Tag extends ActiveRecord
 {
@@ -31,7 +32,7 @@ class Tag extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%tags}}';
+        return Table::TAGS;
     }
 
     /**

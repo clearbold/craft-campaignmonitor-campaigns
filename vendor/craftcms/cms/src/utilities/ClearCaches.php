@@ -9,6 +9,7 @@ namespace craft\utilities;
 
 use Craft;
 use craft\base\Utility;
+use craft\db\Table;
 use craft\events\RegisterCacheOptionsEvent;
 use craft\helpers\ArrayHelper;
 use craft\helpers\FileHelper;
@@ -20,7 +21,7 @@ use yii\base\InvalidArgumentException;
  * ClearCaches represents a ClearCaches dashboard widget.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class ClearCaches extends Utility
 {
@@ -126,7 +127,17 @@ class ClearCaches extends Utility
                 'key' => 'cp-resources',
                 'label' => Craft::t('app', 'Control Panel resources'),
                 'action' => function() {
-                    FileHelper::clearDirectory(Craft::$app->getAssetManager()->basePath, [
+                    $basePath = Craft::$app->getConfig()->getGeneral()->resourceBasePath;
+                    $request = Craft::$app->getRequest();
+                    if (
+                        $request->getIsConsoleRequest() &&
+                        $request->isWebrootAliasSetDynamically &&
+                        strpos($basePath, '@webroot') === 0
+                    ) {
+                        throw new \Exception('Unable to clear Control Panel resources because the location isn\'t known for console commands.');
+                    }
+
+                    FileHelper::clearDirectory(Craft::getAlias($basePath), [
                         'except' => ['/.gitignore']
                     ]);
                 },
@@ -141,7 +152,7 @@ class ClearCaches extends Utility
                 'label' => Craft::t('app', 'Asset transform index'),
                 'action' => function() {
                     Craft::$app->getDb()->createCommand()
-                        ->truncateTable('{{%assettransformindex}}')
+                        ->truncateTable(Table::ASSETTRANSFORMINDEX)
                         ->execute();
                 }
             ],
@@ -150,7 +161,7 @@ class ClearCaches extends Utility
                 'label' => Craft::t('app', 'Asset indexing data'),
                 'action' => function() {
                     Craft::$app->getDb()->createCommand()
-                        ->truncateTable('{{%assetindexdata}}')
+                        ->truncateTable(Table::ASSETINDEXDATA)
                         ->execute();
                 }
             ],
@@ -158,6 +169,11 @@ class ClearCaches extends Utility
                 'key' => 'template-caches',
                 'label' => Craft::t('app', 'Template caches'),
                 'action' => [Craft::$app->getTemplateCaches(), 'deleteAllCaches']
+            ],
+            [
+                'key' => 'graphql-caches',
+                'label' => Craft::t('app', 'GraphQL caches'),
+                'action' => [Craft::$app->getGql(), 'invalidateCaches']
             ],
         ];
 

@@ -12,6 +12,7 @@ namespace clearbold\cmservice\services;
 require_once CRAFT_VENDOR_PATH.'/campaignmonitor/createsend-php/csrest_clients.php';
 require_once CRAFT_VENDOR_PATH.'/campaignmonitor/createsend-php/csrest_lists.php';
 require_once CRAFT_VENDOR_PATH.'/campaignmonitor/createsend-php/csrest_subscribers.php';
+require_once CRAFT_VENDOR_PATH.'/campaignmonitor/createsend-php/csrest_campaigns.php';
 
 use clearbold\cmservice\CmService;
 
@@ -214,6 +215,42 @@ class CampaignMonitorService extends Component
     /*
      * @return mixed
      */
+    public function updateSubscriber($listId = '', $oldEmail = '', $email = '', $subscriber = array()) {
+        $settings = CmService::$plugin->getSettings();
+
+        try {
+            $auth = array(
+                'api_key' => (string)$settings->apiKey);
+            $client = new \CS_REST_Subscribers(
+                $listId,
+                $auth);
+            $result = $client->update($oldEmail, $subscriber);
+
+            if($result->was_successful()) {
+                $body = $result->response;
+                return [
+                    'success' => true,
+                    'statusCode' => $result->http_status_code,
+                    'body' => $body
+                ];
+            } else {
+                return [
+                    'success' => false,
+                    'statusCode' => $result->http_status_code,
+                    'reason' => $result->response->Message
+                ];
+            }
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'reason' => $e->getMessage()
+            ];
+        }
+    }
+
+    /*
+     * @return mixed
+     */
     public function addSubscriber($listId = '', $subscriber = array())
     {
         $settings = CmService::$plugin->getSettings();
@@ -247,6 +284,7 @@ class CampaignMonitorService extends Component
             ];
         }
     }
+
     public function unsubSubscriber($listId = '', $email = '')
     {
         $settings = CmService::$plugin->getSettings();
@@ -258,6 +296,56 @@ class CampaignMonitorService extends Component
                 $listId,
                 $auth);
             $result = $client->unsubscribe($email);
+
+            if($result->was_successful()) {
+                $body = $result->response;
+                return [
+                    'success' => true,
+                    'statusCode' => $result->http_status_code,
+                    'body' => $body
+                ];
+            } else {
+                return [
+                    'success' => false,
+                    'statusCode' => $result->http_status_code,
+                    'reason' => $result->response->Message
+                ];
+            }
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'reason' => $e->getMessage()
+            ];
+        }
+    }
+
+    /*
+     * @return mixed
+     */
+    // public function createCampaign($campaign = array())
+    public function createCampaign()
+    {
+        $settings = CmService::$plugin->getSettings();
+
+        $campaign = array(
+            'Subject' => 'Campaign Subject',
+            'Name' => 'Campaign Name',
+            'FromName' => 'Campaign From Name',
+            'FromEmail' => 'hello@clearbold.com',
+            'ReplyTo' => 'hello@clearbold.com',
+            'HtmlUrl' => 'http://email.clearbold.com/wide-template/email/live.html',
+            # 'TextUrl' => 'Optional campaign text import URL',
+            'ListIDs' => array('8f9c4e3094ab4d389d09db06215fdee9'),
+            // 'SegmentIDs' => array('First Segment', 'Second Segment')
+        );
+
+        try {
+            $auth = array(
+                'api_key' => (string)$settings->apiKey);
+            $client = new \CS_REST_Campaigns(
+                NULL,
+                $auth);
+            $result = $client->create('2b87d08d39d83bc24d44ba44a1f06020', $campaign);
 
             if($result->was_successful()) {
                 $body = $result->response;

@@ -8,12 +8,14 @@
 namespace craft\controllers;
 
 use Craft;
+use craft\base\Element;
 use craft\elements\Entry;
 use craft\helpers\Json;
 use craft\helpers\UrlHelper;
 use craft\models\EntryType;
 use craft\models\Section;
 use craft\models\Section_SiteSettings;
+use craft\web\assets\editsection\EditSectionAsset;
 use craft\web\Controller;
 use yii\web\BadRequestHttpException;
 use yii\web\NotFoundHttpException;
@@ -25,7 +27,7 @@ use yii\web\Response;
  * Note that all actions in this controller require administrator access in order to execute.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class SectionsController extends Controller
 {
@@ -39,6 +41,8 @@ class SectionsController extends Controller
     {
         // All section actions require an admin
         $this->requireAdmin();
+
+        parent::init();
     }
 
     /**
@@ -79,7 +83,7 @@ class SectionsController extends Controller
                 }
             }
 
-            $variables['title'] = $section->name;
+            $variables['title'] = trim($section->name) ?: Craft::t('app', 'Edit Section');
         } else {
             if ($section === null) {
                 $section = new Section();
@@ -121,6 +125,8 @@ class SectionsController extends Controller
             ],
         ];
 
+        Craft::$app->getView()->registerAssetBundle(EditSectionAsset::class);
+
         return $this->renderTemplate('settings/sections/_edit', $variables);
     }
 
@@ -144,7 +150,8 @@ class SectionsController extends Controller
         $section->handle = $request->getBodyParam('handle');
         $section->type = $request->getBodyParam('type');
         $section->enableVersioning = $request->getBodyParam('enableVersioning', true);
-        $section->propagateEntries = $request->getBodyParam('propagateEntries', true);
+        $section->propagationMethod = $request->getBodyParam('propagationMethod', Section::PROPAGATION_METHOD_ALL);
+        $section->previewTargets = $request->getBodyParam('previewTargets') ?: [];
 
         if ($section->type === Section::TYPE_STRUCTURE) {
             $section->maxLevels = $request->getBodyParam('maxLevels');
@@ -154,7 +161,7 @@ class SectionsController extends Controller
         $allSiteSettings = [];
 
         foreach (Craft::$app->getSites()->getAllSites() as $site) {
-            $postedSettings = $request->getBodyParam('sites.'.$site->handle);
+            $postedSettings = $request->getBodyParam('sites.' . $site->handle);
 
             // Skip disabled sites if this is a multi-site install
             if (Craft::$app->getIsMultiSite() && empty($postedSettings['enabled'])) {
@@ -165,16 +172,14 @@ class SectionsController extends Controller
             $siteSettings->siteId = $site->id;
 
             if ($section->type === Section::TYPE_SINGLE) {
-                $siteSettings->hasUrls = true;
-                $siteSettings->uriFormat = $postedSettings['singleUri'] ?: '__home__';
-                $siteSettings->template = $postedSettings['template'];
+                $siteSettings->uriFormat = ($postedSettings['singleHomepage'] ?? false) ? Element::HOMEPAGE_URI : ($postedSettings['singleUri'] ?? null);
             } else {
+                $siteSettings->uriFormat = $postedSettings['uriFormat'] ?? null;
                 $siteSettings->enabledByDefault = (bool)$postedSettings['enabledByDefault'];
+            }
 
-                if ($siteSettings->hasUrls = !empty($postedSettings['uriFormat'])) {
-                    $siteSettings->uriFormat = $postedSettings['uriFormat'];
-                    $siteSettings->template = $postedSettings['template'];
-                }
+            if ($siteSettings->hasUrls = (bool)$siteSettings->uriFormat) {
+                $siteSettings->template = $postedSettings['template'];
             }
 
             $allSiteSettings[$site->id] = $siteSettings;
@@ -244,7 +249,7 @@ class SectionsController extends Controller
             ],
             [
                 'label' => Craft::t('site', $section->name),
-                'url' => UrlHelper::url('settings/sections/'.$section->id)
+                'url' => UrlHelper::url('settings/sections/' . $section->id)
             ],
         ];
 
@@ -290,7 +295,7 @@ class SectionsController extends Controller
                 }
             }
 
-            $title = $entryType->name;
+            $title = trim($entryType->name) ?: Craft::t('app', 'Edit Entry Type');
         } else {
             if ($entryType === null) {
                 $entryType = new EntryType();
@@ -312,11 +317,11 @@ class SectionsController extends Controller
             ],
             [
                 'label' => $section->name,
-                'url' => UrlHelper::url('settings/sections/'.$section->id)
+                'url' => UrlHelper::url('settings/sections/' . $section->id)
             ],
             [
                 'label' => Craft::t('app', 'Entry Types'),
-                'url' => UrlHelper::url('settings/sections/'.$sectionId.'/entrytypes')
+                'url' => UrlHelper::url('settings/sections/' . $sectionId . '/entrytypes')
             ],
         ];
 

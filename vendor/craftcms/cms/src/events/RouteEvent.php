@@ -13,7 +13,7 @@ use yii\base\Event;
  * RouteEvent class.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class RouteEvent extends Event
 {
@@ -32,12 +32,7 @@ class RouteEvent extends Event
     public $template;
 
     /**
-     * @var int|null The site ID the route should be limited to, if any
+     * @var string|null The site UID the route should be limited to, if any
      */
-    public $siteId;
-
-    /**
-     * @var int|null The route ID, if it has one yet
-     */
-    public $routeId;
+    public $siteUid;
 }

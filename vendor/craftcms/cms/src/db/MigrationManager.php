@@ -22,7 +22,7 @@ use yii\di\Instance;
  * MigrationManager manages a set of migrations.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class MigrationManager extends Component
 {
@@ -66,7 +66,7 @@ class MigrationManager extends Component
     /**
      * @var string The migrations table name
      */
-    public $migrationTable = '{{%migrations}}';
+    public $migrationTable = Table::MIGRATIONS;
 
     // Public Methods
     // =========================================================================
@@ -83,11 +83,7 @@ class MigrationManager extends Component
         }
 
         if (!in_array($this->type, [self::TYPE_APP, self::TYPE_PLUGIN, self::TYPE_CONTENT], true)) {
-            throw new InvalidConfigException('Invalid migration type: '.$this->type);
-        }
-
-        if ($this->type == self::TYPE_PLUGIN && $this->pluginId === null) {
-            throw new InvalidConfigException('The plugin ID has not been set.');
+            throw new InvalidConfigException('Invalid migration type: ' . $this->type);
         }
 
         if ($this->migrationPath === null) {
@@ -112,8 +108,8 @@ class MigrationManager extends Component
             throw new Exception("Can't instantiate migrations because the migration folder doesn't exist");
         }
 
-        $file = $this->migrationPath.DIRECTORY_SEPARATOR.$name.'.php';
-        $class = $this->migrationNamespace.'\\'.$name;
+        $file = $this->migrationPath . DIRECTORY_SEPARATOR . $name . '.php';
+        $class = $this->migrationNamespace . '\\' . $name;
         require_once $file;
 
         return new $class;
@@ -147,9 +143,9 @@ class MigrationManager extends Component
         $n = count($migrationNames);
 
         if ($n === $total) {
-            $logMessage = "Total $n new ".($n === 1 ? 'migration' : 'migrations').' to be applied:';
+            $logMessage = "Total $n new " . ($n === 1 ? 'migration' : 'migrations') . ' to be applied:';
         } else {
-            $logMessage = "Total $n out of $total new ".($total === 1 ? 'migration' : 'migrations').' to be applied:';
+            $logMessage = "Total $n out of $total new " . ($total === 1 ? 'migration' : 'migrations') . ' to be applied:';
         }
 
         foreach ($migrationNames as $migrationName) {
@@ -190,7 +186,7 @@ class MigrationManager extends Component
         }
 
         $n = count($migrationNames);
-        $logMessage = "Total $n ".($n === 1 ? 'migration' : 'migrations').' to be reverted:';
+        $logMessage = "Total $n " . ($n === 1 ? 'migration' : 'migrations') . ' to be reverted:';
 
         foreach ($migrationNames as $migrationName) {
             $logMessage .= "\n\t$migrationName";
@@ -249,10 +245,10 @@ class MigrationManager extends Component
         }
         $time = microtime(true) - $start;
 
-        $log = ($success ? 'Applied ' : 'Failed to apply ').$migrationName.' (time: '.sprintf('%.3f', $time).'s).';
+        $log = ($success ? 'Applied ' : 'Failed to apply ') . $migrationName . ' (time: ' . sprintf('%.3f', $time) . 's).';
         if (!$isConsoleRequest) {
             $output = ob_get_clean();
-            $log .= " Output:\n".$output;
+            $log .= " Output:\n" . $output;
         }
 
         if (!$success) {
@@ -303,10 +299,10 @@ class MigrationManager extends Component
         }
         $time = microtime(true) - $start;
 
-        $log = ($success ? 'Reverted ' : 'Failed to revert ').$migrationName.' (time: '.sprintf('%.3f', $time).'s).';
+        $log = ($success ? 'Reverted ' : 'Failed to revert ') . $migrationName . ' (time: ' . sprintf('%.3f', $time) . 's).';
         if (!$isConsoleRequest) {
             $output = ob_get_clean();
-            $log .= " Output:\n".$output;
+            $log .= " Output:\n" . $output;
         }
 
         if (!$success) {
@@ -343,6 +339,8 @@ class MigrationManager extends Component
      */
     public function addMigrationHistory(string $name)
     {
+        $this->_validatePluginConfig();
+
         Craft::$app->getDb()->createCommand()
             ->insert(
                 $this->migrationTable,
@@ -362,6 +360,8 @@ class MigrationManager extends Component
      */
     public function removeMigrationHistory(string $name)
     {
+        $this->_validatePluginConfig();
+
         Craft::$app->getDb()->createCommand()
             ->delete(
                 $this->migrationTable,
@@ -369,6 +369,25 @@ class MigrationManager extends Component
                     'type' => $this->type,
                     'pluginId' => $this->pluginId,
                     'name' => $name
+                ])
+            ->execute();
+    }
+
+    /**
+     * Truncates the migration history.
+     *
+     * @since 3.0.32
+     */
+    public function truncateHistory()
+    {
+        $this->_validatePluginConfig();
+
+        Craft::$app->getDb()->createCommand()
+            ->delete(
+                $this->migrationTable,
+                [
+                    'type' => $this->type,
+                    'pluginId' => $this->pluginId,
                 ])
             ->execute();
     }
@@ -408,7 +427,7 @@ class MigrationManager extends Component
                 continue;
             }
 
-            $path = $this->migrationPath.DIRECTORY_SEPARATOR.$file;
+            $path = $this->migrationPath . DIRECTORY_SEPARATOR . $file;
 
             if (preg_match('/^(m\d{6}_\d{6}_.*?)\.php$/', $file, $matches) && is_file($path) && !isset($history[$matches[1]])) {
                 $migrations[] = $matches[1];
@@ -423,6 +442,22 @@ class MigrationManager extends Component
 
     // Private Methods
     // =========================================================================
+
+    /**
+     * Ensures that [[pluginId]] is set properly.
+     *
+     * @throws InvalidConfigException
+     */
+    private function _validatePluginConfig()
+    {
+        if ($this->type === self::TYPE_PLUGIN) {
+            if ($this->pluginId === null) {
+                throw new InvalidConfigException('The plugin ID has not been set.');
+            }
+        } else {
+            $this->pluginId = null;
+        }
+    }
 
     /**
      * Normalizes the $migration argument passed to [[migrateUp()]] and [[migrateDown()]].
@@ -450,8 +485,13 @@ class MigrationManager extends Component
      */
     private function _createMigrationQuery(): Query
     {
+        $this->_validatePluginConfig();
+
         // TODO: Remove after next breakpoint
-        if (version_compare(Craft::$app->getInfo()->version, '3.0', '<')) {
+        if (
+            version_compare(Craft::$app->getInfo()->version, '3.0', '<') &&
+            Craft::$app->getDb()->columnExists($this->migrationTable, 'version', true)
+        ) {
             $query = (new Query())
                 ->select(['version as name', 'applyTime'])
                 ->from([$this->migrationTable])

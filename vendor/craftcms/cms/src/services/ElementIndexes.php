@@ -13,6 +13,7 @@ use craft\base\Field;
 use craft\base\FieldInterface;
 use craft\base\PreviewableFieldInterface;
 use craft\db\Query;
+use craft\db\Table;
 use craft\helpers\Json;
 use yii\base\Component;
 
@@ -21,7 +22,7 @@ use yii\base\Component;
  * An instance of ElementIndexes service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getElementIndexes()|`Craft::$app->elementIndexes`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class ElementIndexes extends Component
 {
@@ -44,7 +45,7 @@ class ElementIndexes extends Component
         if ($this->_indexSettings === null || !array_key_exists($elementType, $this->_indexSettings)) {
             $result = (new Query())
                 ->select(['settings'])
-                ->from(['{{%elementindexsettings}}'])
+                ->from([Table::ELEMENTINDEXSETTINGS])
                 ->where(['type' => $elementType])
                 ->scalar();
 
@@ -126,7 +127,7 @@ class ElementIndexes extends Component
 
         $affectedRows = Craft::$app->getDb()->createCommand()
             ->upsert(
-                '{{%elementindexsettings}}',
+                Table::ELEMENTINDEXSETTINGS,
                 ['type' => $elementType],
                 ['settings' => Json::encode($settings)])
             ->execute();
@@ -219,7 +220,7 @@ class ElementIndexes extends Component
             // Mix in custom fields
             foreach ($this->getAvailableTableFields($elementType) as $field) {
                 /** @var Field $field */
-                $attributes['field:'.$field->id] = ['label' => Craft::t('site', $field->name)];
+                $attributes['field:' . $field->id] = ['label' => Craft::t('site', $field->name)];
             }
         }
 
@@ -235,6 +236,7 @@ class ElementIndexes extends Component
      */
     public function getTableAttributes(string $elementType, string $sourceKey): array
     {
+        /** @var ElementInterface|string $elementType */
         // If this is a source path, use the first segment
         if (($slash = strpos($sourceKey, '/')) !== false) {
             $sourceKey = substr($sourceKey, 0, $slash);

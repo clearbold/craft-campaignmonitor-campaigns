@@ -16,7 +16,7 @@ use craft\elements\User;
  * UnsuspendUsers represents an Unsuspend Users element action.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class UnsuspendUsers extends ElementAction
 {
@@ -32,10 +32,7 @@ class UnsuspendUsers extends ElementAction
     }
 
     /**
-     * Performs the action on any elements that match the given criteria.
-     *
-     * @param ElementQueryInterface $query The element query defining which elements the action should affect.
-     * @return bool Whether the action was performed successfully.
+     * @inheritdoc
      */
     public function performAction(ElementQueryInterface $query): bool
     {
@@ -43,9 +40,10 @@ class UnsuspendUsers extends ElementAction
         $query->status(User::STATUS_SUSPENDED);
         /** @var User[] $users */
         $users = $query->all();
+        $usersService = Craft::$app->getUsers();
 
         foreach ($users as $user) {
-            Craft::$app->getUsers()->unsuspendUser($user);
+            $usersService->unsuspendUser($user);
         }
 
         $this->setMessage(Craft::t('app', 'Users unsuspended.'));

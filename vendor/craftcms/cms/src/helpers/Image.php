@@ -15,7 +15,7 @@ use craft\image\Svg;
  * Class Image
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Image
 {
@@ -86,11 +86,11 @@ class Image
      * Adapted from https://github.com/ktomk/Miscellaneous/tree/master/get_png_imageinfo.
      *
      * @param string $file The path to the PNG file.
-     * @author Tom Klingenberg <lastflood.net>
+     * @return array|bool Info embedded in the PNG file, or `false` if it wasn’t found.
      * @license Apache 2.0
      * @version 0.1.0
      * @link http://www.libpng.org/pub/png/spec/iso/index-object.html#11IHDR
-     * @return array|bool Info embedded in the PNG file, or `false` if it wasn’t found.
+     * @author Tom Klingenberg <lastflood.net>
      */
     public static function pngImageInfo(string $file)
     {
@@ -156,7 +156,7 @@ class Image
     {
         $extension = pathinfo($filePath, PATHINFO_EXTENSION);
 
-        return in_array(StringHelper::toLowerCase($extension), ['jpg', 'jpeg', 'tiff'], true);
+        return in_array(strtolower($extension), ['jpg', 'jpeg', 'tiff'], true);
     }
 
     /**
@@ -214,7 +214,7 @@ class Image
         // JPG 2 byte signature 0xFF 0xD8
 
         // It's much easier to work with a HEX string here, because of variable signature lengths
-        $signature = StringHelper::toUpperCase(bin2hex(stream_get_contents($stream, 2)));
+        $signature = mb_strtoupper(bin2hex(stream_get_contents($stream, 2)));
 
         try {
             switch ($signature) {
@@ -265,7 +265,7 @@ class Image
                     break;
                 // Maybe PNG
                 case '8950':
-                    $signature .= StringHelper::toUpperCase(bin2hex(stream_get_contents($stream, 6)));
+                    $signature .= mb_strtoupper(bin2hex(stream_get_contents($stream, 6)));
 
                     // Make sure it's PNG
                     if ($signature !== '89504E470D0A1A0A') {
@@ -328,6 +328,32 @@ class Image
         return [$width, $height];
     }
 
+    /**
+     * Clean EXIF data from an image loaded inside an Imagick instance, taking
+     * care not to wipe the ICC profile.
+     *
+     * @param \Imagick $imagick
+     */
+    public static function cleanExifDataFromImagickImage(\Imagick $imagick)
+    {
+        $config = Craft::$app->getConfig()->getGeneral();
+
+        if (!$config->preserveExifData) {
+            $iccProfiles = null;
+            $supportsImageProfiles = method_exists($imagick, 'getimageprofiles');
+
+            if ($config->preserveImageColorProfiles && $supportsImageProfiles) {
+                $iccProfiles = $imagick->getImageProfiles("icc", true);
+            }
+
+            $imagick->stripImage();
+
+            if (!empty($iccProfiles)) {
+                $imagick->profileImage("icc", $iccProfiles['icc'] ?? '');
+            }
+        }
+    }
+
     // Private Methods
     // =========================================================================
 
@@ -342,8 +368,6 @@ class Image
         $ppi = 72;
 
         switch ($unit) {
-            case 'px':
-                return 1;
             case 'in':
                 return $ppi;
             case 'pt':

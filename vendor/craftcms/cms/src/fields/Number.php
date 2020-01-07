@@ -11,6 +11,7 @@ use Craft;
 use craft\base\ElementInterface;
 use craft\base\Field;
 use craft\base\PreviewableFieldInterface;
+use craft\base\SortableFieldInterface;
 use craft\helpers\Db;
 use craft\helpers\Localization;
 use craft\i18n\Locale;
@@ -19,9 +20,9 @@ use craft\i18n\Locale;
  * Number represents a Number field.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
-class Number extends Field implements PreviewableFieldInterface
+class Number extends Field implements PreviewableFieldInterface, SortableFieldInterface
 {
     // Static
     // =========================================================================
@@ -32,6 +33,14 @@ class Number extends Field implements PreviewableFieldInterface
     public static function displayName(): string
     {
         return Craft::t('app', 'Number');
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public static function valueType(): string
+    {
+        return 'int|float|null';
     }
 
     // Properties
@@ -61,6 +70,16 @@ class Number extends Field implements PreviewableFieldInterface
      * @var int|null The size of the field
      */
     public $size;
+
+    /**
+     * @var string|null Text that should be displayed before the input
+     */
+    public $prefix;
+
+    /**
+     * @var string|null Text that should be displayed after the input
+     */
+    public $suffix;
 
     // Public Methods
     // =========================================================================
@@ -144,12 +163,32 @@ class Number extends Field implements PreviewableFieldInterface
      */
     public function normalizeValue($value, ElementInterface $element = null)
     {
+        if ($value === null) {
+            if ($this->defaultValue !== null && $this->isFresh($element)) {
+                return $this->defaultValue;
+            }
+            return null;
+        }
+
         // Was this submitted with a locale ID?
         if (isset($value['locale'], $value['value'])) {
             $value = Localization::normalizeNumber($value['value'], $value['locale']);
         }
 
-        return $value === '' ? null : $value;
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            if ((int)$value == $value) {
+                return (int)$value;
+            }
+            if ((float)$value == $value) {
+                return (float)$value;
+            }
+        }
+
+        return $value;
     }
 
     /**
@@ -157,22 +196,20 @@ class Number extends Field implements PreviewableFieldInterface
      */
     public function getInputHtml($value, ElementInterface $element = null): string
     {
-        if ($this->isFresh($element) && $this->defaultValue !== null) {
-            $value = $this->defaultValue;
-        }
-
         // If decimals is 0 (or null, empty for whatever reason), don't run this
         if ($value !== null && $this->decimals) {
             $decimalSeparator = Craft::$app->getLocale()->getNumberSymbol(Locale::SYMBOL_DECIMAL_SEPARATOR);
-            $value = number_format($value, $this->decimals, $decimalSeparator, '');
+            try {
+                $value = number_format($value, $this->decimals, $decimalSeparator, '');
+            } catch (\Throwable $e) {
+                // NaN
+            }
         }
 
-        return '<input type="hidden" name="'.$this->handle.'[locale]" value="'.Craft::$app->language.'">'.
-            Craft::$app->getView()->renderTemplate('_includes/forms/text', [
-                'name' => $this->handle.'[value]',
-                'value' => $value,
-                'size' => $this->size
-            ]);
+        return Craft::$app->getView()->renderTemplate('_components/fieldtypes/Number/input', [
+            'field' => $this,
+            'value' => $value,
+        ]);
     }
 
     /**
@@ -181,7 +218,19 @@ class Number extends Field implements PreviewableFieldInterface
     public function getElementValidationRules(): array
     {
         return [
-            ['number', 'min' => $this->min ?: null, 'max' => $this->max ?: null],
+            ['number', 'min' => $this->min, 'max' => $this->max],
         ];
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getTableAttributeHtml($value, ElementInterface $element): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        return Craft::$app->getFormatter()->asDecimal($value, $this->decimals);
     }
 }

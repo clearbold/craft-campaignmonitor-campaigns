@@ -8,14 +8,18 @@
 namespace craft\services;
 
 use Craft;
+use craft\base\Field;
 use craft\base\Volume;
 use craft\db\Query;
+use craft\db\Table;
 use craft\elements\Asset;
 use craft\elements\User;
 use craft\errors\ImageException;
 use craft\errors\InvalidSubpathException;
 use craft\errors\UserNotFoundException;
 use craft\errors\VolumeException;
+use craft\events\ConfigEvent;
+use craft\events\FieldEvent;
 use craft\events\UserAssignGroupEvent;
 use craft\events\UserEvent;
 use craft\events\UserGroupsAssignEvent;
@@ -24,8 +28,11 @@ use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use craft\helpers\Image;
 use craft\helpers\Json;
+use craft\helpers\ProjectConfig as ProjectConfigHelper;
+use craft\helpers\StringHelper;
 use craft\helpers\Template;
 use craft\helpers\UrlHelper;
+use craft\models\FieldLayout;
 use craft\records\User as UserRecord;
 use DateTime;
 use yii\base\Component;
@@ -37,7 +44,7 @@ use yii\db\Exception as DbException;
  * An instance of the Users service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getUsers()|`Craft::$app->users`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Users extends Component
 {
@@ -132,6 +139,8 @@ class Users extends Component
      */
     const EVENT_AFTER_ASSIGN_USER_TO_DEFAULT_GROUP = 'afterAssignUserToDefaultGroup';
 
+    const CONFIG_USERLAYOUT_KEY = 'users.fieldLayouts';
+
     // Public Methods
     // =========================================================================
 
@@ -163,15 +172,30 @@ class Users extends Component
      */
     public function getUserByUsernameOrEmail(string $usernameOrEmail)
     {
-        return User::find()
-            ->where([
-                'or',
-                ['username' => $usernameOrEmail],
-                ['email' => $usernameOrEmail]
-            ])
+        $query = User::find()
             ->addSelect(['users.password', 'users.passwordResetRequired'])
-            ->status(null)
-            ->one();
+            ->anyStatus();
+
+        if (Craft::$app->getDb()->getIsMysql()) {
+            $query
+                ->where([
+                    'username' => $usernameOrEmail,
+                ])
+                ->orWhere([
+                    'email' => $usernameOrEmail,
+                ]);
+        } else {
+            // Postgres is case-sensitive
+            $query
+                ->where([
+                    'lower([[username]])' => mb_strtolower($usernameOrEmail),
+                ])
+                ->orWhere([
+                    'lower([[email]])' => mb_strtolower($usernameOrEmail),
+                ]);
+        }
+
+        return $query->one();
     }
 
     /**
@@ -188,8 +212,7 @@ class Users extends Component
     {
         return User::find()
             ->uid($uid)
-            ->status(null)
-            ->enabledForSite(false)
+            ->anyStatus()
             ->one();
     }
 
@@ -221,7 +244,7 @@ class Users extends Component
             $userRecord->verificationCode = null;
             $userRecord->save();
 
-            Craft::warning('The verification code ('.$code.') given for userId: '.$user->id.' is expired.', __METHOD__);
+            Craft::warning('The verification code (' . $code . ') given for userId: ' . $user->id . ' is expired.', __METHOD__);
             return false;
         }
 
@@ -232,7 +255,7 @@ class Users extends Component
         }
 
         if (!$valid) {
-            Craft::warning('The verification code ('.$code.') given for userId: '.$user->id.' does not match the hash in the database.', __METHOD__);
+            Craft::warning('The verification code (' . $code . ') given for userId: ' . $user->id . ' does not match the hash in the database.', __METHOD__);
             return false;
         }
 
@@ -251,7 +274,7 @@ class Users extends Component
         try {
             $preferences = (new Query())
                 ->select(['preferences'])
-                ->from(['{{%userpreferences}}'])
+                ->from([Table::USERPREFERENCES])
                 ->where(['userId' => $userId])
                 ->scalar();
 
@@ -273,7 +296,7 @@ class Users extends Component
 
         Craft::$app->getDb()->createCommand()
             ->upsert(
-                '{{%userpreferences}}',
+                Table::USERPREFERENCES,
                 ['userId' => $user->id],
                 ['preferences' => Json::encode($preferences)],
                 [],
@@ -339,7 +362,7 @@ class Users extends Component
     /**
      * Sends a password reset email to a user.
      *
-     * A new verification code will generated for the user overwriting any existing one.
+     * A new verification code be will generated for the user, overwriting any existing one.
      *
      * @param User $user The user to send the forgot password email to.
      * @return bool Whether the email was sent successfully.
@@ -394,14 +417,14 @@ class Users extends Component
         }
 
         $volumes = Craft::$app->getVolumes();
-        $volumeId = Craft::$app->getSystemSettings()->getSetting('users', 'photoVolumeId');
+        $volumeUid = Craft::$app->getProjectConfig()->get('users.photoVolumeUid');
 
-        if (!$volumeId || ($volume = $volumes->getVolumeById($volumeId)) === null) {
+        if (!$volumeUid || ($volume = $volumes->getVolumeByUid($volumeUid)) === null) {
             throw new VolumeException(Craft::t('app',
                 'The volume set for user photo storage is not valid.'));
         }
 
-        $subpath = (string)Craft::$app->getSystemSettings()->getSetting('users', 'photoSubpath');
+        $subpath = (string)Craft::$app->getProjectConfig()->get('users.photoSubpath');
 
         if ($subpath) {
             try {
@@ -415,7 +438,7 @@ class Users extends Component
         $assetsService = Craft::$app->getAssets();
 
         // If the photo exists, just replace the file.
-        if ($user->photoId) {
+        if ($user->photoId && $user->getPhoto() !== null) {
             // No longer a new file.
             $assetsService->replaceAssetFile($assetsService->getAssetById($user->photoId), $fileLocation, $filenameToUse);
         } else {
@@ -427,13 +450,13 @@ class Users extends Component
             $photo->tempFilePath = $fileLocation;
             $photo->filename = $filenameToUse;
             $photo->newFolderId = $folderId;
-            $photo->volumeId = $volumeId;
+            $photo->volumeId = $volume->id;
 
             // Save photo.
             $elementsService = Craft::$app->getElements();
             $elementsService->saveElement($photo);
 
-            $user->photoId = $photo->id;
+            $user->setPhoto($photo);
             $elementsService->saveElement($user, false);
         }
     }
@@ -461,11 +484,13 @@ class Users extends Component
         // Update the User record
         $userRecord = $this->_getUserRecordById($user->id);
         $userRecord->lastLoginDate = $now;
-        $userRecord->lastLoginAttemptIp = Craft::$app->getRequest()->getUserIP();
         $userRecord->invalidLoginWindowStart = null;
         $userRecord->invalidLoginCount = null;
-        $userRecord->verificationCode = null;
-        $userRecord->verificationCodeIssuedDate = null;
+
+        if (Craft::$app->getConfig()->getGeneral()->storeUserIps) {
+            $userRecord->lastLoginAttemptIp = Craft::$app->getRequest()->getUserIP();
+        }
+
         $userRecord->save();
 
         // Update the User model too
@@ -484,7 +509,10 @@ class Users extends Component
         $now = DateTimeHelper::currentUTCDateTime();
 
         $userRecord->lastInvalidLoginDate = $now;
-        $userRecord->lastLoginAttemptIp = Craft::$app->getRequest()->getUserIP();
+
+        if (Craft::$app->getConfig()->getGeneral()->storeUserIps) {
+            $userRecord->lastLoginAttemptIp = Craft::$app->getRequest()->getUserIP();
+        }
 
         // Was that one too many?
         $maxInvalidLogins = Craft::$app->getConfig()->getGeneral()->maxInvalidLogins;
@@ -591,12 +619,11 @@ class Users extends Component
 
         $userRecord = $this->_getUserRecordById($user->id);
         $userRecord->email = $user->unverifiedEmail;
+        $userRecord->unverifiedEmail = null;
 
         if (Craft::$app->getConfig()->getGeneral()->useEmailAsUsername) {
             $userRecord->username = $user->unverifiedEmail;
         }
-
-        $userRecord->unverifiedEmail = null;
 
         if (!$userRecord->save()) {
             $user->addErrors($userRecord->getErrors());
@@ -760,7 +787,7 @@ class Users extends Component
     {
         $affectedRows = Craft::$app->getDb()->createCommand()
             ->upsert(
-                '{{%shunnedmessages}}',
+                Table::SHUNNEDMESSAGES,
                 [
                     'userId' => $userId,
                     'message' => $message
@@ -784,7 +811,7 @@ class Users extends Component
     {
         $affectedRows = Craft::$app->getDb()->createCommand()
             ->delete(
-                '{{%shunnedmessages}}',
+                Table::SHUNNEDMESSAGES,
                 [
                     'userId' => $userId,
                     'message' => $message
@@ -804,7 +831,7 @@ class Users extends Component
     public function hasUserShunnedMessage(int $userId, string $message): bool
     {
         return (new Query())
-            ->from(['{{%shunnedmessages}}'])
+            ->from([Table::SHUNNEDMESSAGES])
             ->where([
                 'and',
                 [
@@ -855,22 +882,15 @@ class Users extends Component
         $expire = DateTimeHelper::currentUTCDateTime();
         $pastTime = $expire->sub($interval);
 
-        $userIds = (new Query())
-            ->select(['id'])
-            ->from(['{{%users}}'])
-            ->where([
-                'and',
-                ['pending' => true],
-                ['<', 'verificationCodeIssuedDate', Db::prepareDateForDb($pastTime)]
-            ])
-            ->column();
+        $query = User::find()
+            ->status('pending')
+            ->andWhere(['<', 'users.verificationCodeIssuedDate', Db::prepareDateForDb($pastTime)]);
 
         $elementsService = Craft::$app->getElements();
 
-        foreach ($userIds as $userId) {
-            $user = $this->getUserById($userId);
+        foreach ($query->each() as $user) {
             $elementsService->deleteElement($user);
-            Craft::info("Just deleted pending user {$user->username} ({$userId}), because they took too long to activate their account.", __METHOD__);
+            Craft::info("Just deleted pending user {$user->username} ({$user->id}), because they took too long to activate their account.", __METHOD__);
         }
     }
 
@@ -896,7 +916,7 @@ class Users extends Component
 
         // Delete their existing groups
         Craft::$app->getDb()->createCommand()
-            ->delete('{{%usergroups_users}}', ['userId' => $userId])
+            ->delete(Table::USERGROUPS_USERS, ['userId' => $userId])
             ->execute();
 
         if (!empty($groupIds)) {
@@ -908,7 +928,7 @@ class Users extends Component
 
             Craft::$app->getDb()->createCommand()
                 ->batchInsert(
-                    '{{%usergroups_users}}',
+                    Table::USERGROUPS_USERS,
                     [
                         'groupId',
                         'userId'
@@ -953,9 +973,15 @@ class Users extends Component
     public function assignUserToDefaultGroup(User $user): bool
     {
         // Make sure there's a default group
-        $defaultGroupId = Craft::$app->getSystemSettings()->getSetting('users', 'defaultGroup');
+        $uid = Craft::$app->getProjectConfig()->get('users.defaultGroup');
 
-        if (!$defaultGroupId) {
+        if (!$uid) {
+            return false;
+        }
+
+        $group = Craft::$app->getUserGroups()->getGroupByUid($uid);
+
+        if (!$group) {
             return false;
         }
 
@@ -969,7 +995,7 @@ class Users extends Component
             return false;
         }
 
-        if (!$this->assignUserToGroups($user->id, [$defaultGroupId])) {
+        if (!$this->assignUserToGroups($user->id, [$group->id])) {
             return false;
         }
 
@@ -981,6 +1007,130 @@ class Users extends Component
         }
 
         return true;
+    }
+
+    /**
+     * Handle user field layout changes.
+     *
+     * @param ConfigEvent $event
+     */
+    public function handleChangedUserFieldLayout(ConfigEvent $event)
+    {
+        // Use this because we want this to trigger this if anything changes inside but ONLY ONCE
+        static $parsed = false;
+        if ($parsed) {
+            return;
+        }
+
+        $parsed = true;
+        $data = Craft::$app->getProjectConfig()->get(self::CONFIG_USERLAYOUT_KEY, true);
+
+        $fieldsService = Craft::$app->getFields();
+
+        if (empty($data) || empty($config = reset($data))) {
+            $fieldsService->deleteLayoutsByType(User::class);
+            return;
+        }
+
+        // Make sure fields are processed
+        ProjectConfigHelper::ensureAllFieldsProcessed();
+
+        // Save the field layout
+        $layout = FieldLayout::createFromConfig($config);
+        $layout->id = $fieldsService->getLayoutByType(User::class)->id;
+        $layout->type = User::class;
+        $layout->uid = key($data);
+        $fieldsService->saveLayout($layout);
+    }
+
+    /**
+     * Save the user field layout
+     *
+     * @param FieldLayout $layout
+     * @return bool
+     */
+    public function saveLayout(FieldLayout $layout)
+    {
+        $projectConfig = Craft::$app->getProjectConfig();
+        $fieldLayoutConfig = $layout->getConfig();
+        $uid = StringHelper::UUID();
+
+        $projectConfig->set(self::CONFIG_USERLAYOUT_KEY, [$uid => $fieldLayoutConfig]);
+        return true;
+    }
+
+    /**
+     * Returns whether a user is allowed to impersonate another user.
+     *
+     * @param User $impersonator
+     * @param User $impersonatee
+     * @return bool
+     * @since 3.2.0
+     */
+    public function canImpersonate(User $impersonator, User $impersonatee): bool
+    {
+        // Admins can do whatever they want
+        if ($impersonator->admin) {
+            return true;
+        }
+
+        // Only admins are allowed to impersonate another admin
+        if ($impersonatee->admin) {
+            return false;
+        }
+
+        // impersonateUsers permission is obviously required
+        if (!$impersonator->can('impersonateUsers')) {
+            return false;
+        }
+
+        // Make sure the impersonator has at least all the same permissions as the impersonatee
+        $permissionsService = Craft::$app->getUserPermissions();
+        $impersonatorPermissions = array_flip($permissionsService->getPermissionsByUserId($impersonator->id));
+        $impersonateePermissions = $permissionsService->getPermissionsByUserId($impersonatee->id);
+
+        foreach ($impersonateePermissions as $permission) {
+            if (!isset($impersonatorPermissions[$permission])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Prune a deleted field from user group layout.
+     *
+     * @param FieldEvent $event
+     */
+    public function pruneDeletedField(FieldEvent $event)
+    {
+        /** @var Field $field */
+        $field = $event->field;
+        $fieldUid = $field->uid;
+
+        $projectConfig = Craft::$app->getProjectConfig();
+        $fieldLayouts = $projectConfig->get(self::CONFIG_USERLAYOUT_KEY);
+
+        // Engage stealth mode
+        $projectConfig->muteEvents = true;
+
+        // Prune the user field layout.
+        if (is_array($fieldLayouts)) {
+            foreach ($fieldLayouts as $layoutUid => $layout) {
+                if (!empty($layout['tabs'])) {
+                    foreach ($layout['tabs'] as $tabUid => $tab) {
+                        $projectConfig->remove(self::CONFIG_USERLAYOUT_KEY . '.' . $layoutUid . '.tabs.' . $tabUid . '.fields.' . $fieldUid);
+                    }
+                }
+            }
+        }
+
+        // Nuke all the layout fields from the DB
+        Craft::$app->getDb()->createCommand()->delete('{{%fieldlayoutfields}}', ['fieldId' => $field->id])->execute();
+
+        // Allow events again
+        $projectConfig->muteEvents = false;
     }
 
     // Private Methods
@@ -1014,6 +1164,10 @@ class Users extends Component
     {
         $securityService = Craft::$app->getSecurity();
         $unhashedCode = $securityService->generateRandomString(32);
+
+        // Strip underscores so they don't get interpreted as italics markers in the Markdown parser
+        $unhashedCode = str_replace('_', StringHelper::randomString(1), $unhashedCode);
+
         $hashedCode = $securityService->hashPassword($unhashedCode);
         $userRecord->verificationCode = $hashedCode;
         $userRecord->verificationCodeIssuedDate = DateTimeHelper::currentUTCDateTime();
@@ -1058,7 +1212,7 @@ class Users extends Component
         $userRecord->save();
 
         $generalConfig = Craft::$app->getConfig()->getGeneral();
-        $path = $generalConfig->actionTrigger.'/users/'.$action;
+        $path = $generalConfig->actionTrigger . '/users/' . $action;
         $params = [
             'code' => $unhashedVerificationCode,
             'id' => $user->uid
@@ -1073,11 +1227,15 @@ class Users extends Component
                 return UrlHelper::cpUrl($path, $params, $scheme);
             }
 
-            $path = $generalConfig->cpTrigger.'/'.$path;
+            $path = $generalConfig->cpTrigger . '/' . $path;
         }
 
-        // todo: should we factor in the user's preferred language (as we did in v2)?
-        $siteId = Craft::$app->getSites()->getPrimarySite()->id;
+        if (Craft::$app->getRequest()->getIsCpRequest()) {
+            $siteId = Craft::$app->getSites()->getPrimarySite()->id;
+        } else {
+            $siteId = Craft::$app->getSites()->getCurrentSite()->id;
+        }
+
         return UrlHelper::siteUrl($path, $params, $scheme, $siteId);
     }
 }

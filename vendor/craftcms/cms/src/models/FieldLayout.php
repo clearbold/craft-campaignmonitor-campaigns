@@ -16,7 +16,7 @@ use craft\base\Model;
  * FieldLayout model class.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class FieldLayout extends Model
 {
@@ -33,6 +33,10 @@ class FieldLayout extends Model
      */
     public $type;
 
+    /**
+     * @var string|null UID
+     */
+    public $uid;
 
     /**
      * @var
@@ -52,9 +56,9 @@ class FieldLayout extends Model
      */
     public function rules()
     {
-        return [
-            [['id'], 'number', 'integerOnly' => true],
-        ];
+        $rules = parent::rules();
+        $rules[] = [['id'], 'number', 'integerOnly' => true];
+        return $rules;
     }
 
     /**
@@ -73,6 +77,82 @@ class FieldLayout extends Model
         }
 
         return $this->_tabs = Craft::$app->getFields()->getLayoutTabsById($this->id);
+    }
+
+    /**
+     * Return the field layout config or null if no fields configured.
+     *
+     * @return array|null
+     * @since 3.1.0
+     */
+    public function getConfig()
+    {
+        $output = [];
+
+        foreach ($this->getTabs() as $tab) {
+            $tabData = [
+                'name' => $tab->name,
+                'sortOrder' => (int)$tab->sortOrder,
+            ];
+
+            /** @var Field $field */
+            foreach ($tab->getFields() as $field) {
+                $tabData['fields'][$field->uid] = [
+                    'required' => (bool)$field->required,
+                    'sortOrder' => (int)$field->sortOrder
+                ];
+            }
+            $output['tabs'][] = $tabData;
+        }
+
+        return $output ?: null;
+    }
+
+    /**
+     * Return a field layout created from config data.
+     *
+     * @param array $config Config data to use.
+     * @return self
+     * @since 3.1.0
+     */
+    public static function createFromConfig(array $config): self
+    {
+        $layout = new self();
+
+        $tabs = [];
+        $fieldService = Craft::$app->getFields();
+
+        if (!empty($config['tabs']) && is_array($config['tabs'])) {
+            foreach ($config['tabs'] as $tab) {
+                $layoutTab = new FieldLayoutTab();
+                $layoutTab->name = $tab['name'];
+                $layoutTab->sortOrder = $tab['sortOrder'];
+
+                if (!empty($tab['fields']) && is_array($tab['fields'])) {
+                    $layoutFields = [];
+
+                    foreach ($tab['fields'] as $uid => $field) {
+                        /** @var Field $createdField */
+                        $createdField = $fieldService->getFieldByUid($uid);
+
+                        if ($createdField) {
+                            $createdField->sortOrder = $field['sortOrder'];
+                            $createdField->required = $field['required'];
+                            $layoutFields[] = $createdField;
+                        }
+                    }
+
+                    $layoutTab->setFields($layoutFields);
+                    $tabs[] = $layoutTab;
+                }
+            }
+        }
+
+        if (!empty($tabs)) {
+            $layout->setTabs($tabs);
+        }
+
+        return $layout;
     }
 
     /**

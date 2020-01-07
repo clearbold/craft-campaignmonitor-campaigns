@@ -8,6 +8,7 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\Table;
 use yii\db\ActiveQueryInterface;
 
 /**
@@ -20,7 +21,7 @@ use yii\db\ActiveQueryInterface;
  * @property FieldLayout $layout Layout
  * @property FieldLayoutField[] $fields Fields
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class FieldLayoutTab extends ActiveRecord
 {
@@ -44,7 +45,7 @@ class FieldLayoutTab extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%fieldlayouttabs}}';
+        return Table::FIELDLAYOUTTABS;
     }
 
     /**

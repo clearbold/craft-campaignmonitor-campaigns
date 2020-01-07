@@ -10,6 +10,7 @@ namespace craft\records;
 use Craft;
 use craft\db\ActiveRecord;
 use craft\db\StructuredElementQuery;
+use craft\db\Table;
 use creocoder\nestedsets\NestedSetsBehavior;
 use yii\db\ActiveQueryInterface;
 
@@ -27,7 +28,7 @@ use yii\db\ActiveQueryInterface;
  * @property Element $element Element
  * @mixin NestedSetsBehavior
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class StructureElement extends ActiveRecord
 {
@@ -52,7 +53,7 @@ class StructureElement extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%structureelements}}';
+        return Table::STRUCTUREELEMENTS;
     }
 
     /**

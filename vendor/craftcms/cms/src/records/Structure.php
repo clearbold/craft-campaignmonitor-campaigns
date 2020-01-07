@@ -8,6 +8,8 @@
 namespace craft\records;
 
 use craft\db\ActiveRecord;
+use craft\db\SoftDeleteTrait;
+use craft\db\Table;
 use yii\db\ActiveQueryInterface;
 
 /**
@@ -17,10 +19,15 @@ use yii\db\ActiveQueryInterface;
  * @property int $maxLevels Max levels
  * @property StructureElement[] $elements Elements
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Structure extends ActiveRecord
 {
+    // Traits
+    // =========================================================================
+
+    use SoftDeleteTrait;
+
     // Public Methods
     // =========================================================================
 
@@ -40,7 +47,7 @@ class Structure extends ActiveRecord
      */
     public static function tableName(): string
     {
-        return '{{%structures}}';
+        return Table::STRUCTURES;
     }
 
     /**

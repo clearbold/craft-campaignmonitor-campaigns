@@ -13,11 +13,9 @@ use craft\helpers\App;
 use craft\helpers\ConfigHelper;
 use craft\helpers\FileHelper;
 use craft\helpers\Image as ImageHelper;
-use craft\helpers\StringHelper;
 use craft\image\Raster;
 use craft\image\Svg;
 use enshrined\svgSanitize\Sanitizer;
-use Imagine\Imagick\Imagick;
 use yii\base\Component;
 use yii\base\Exception;
 
@@ -29,7 +27,7 @@ use yii\base\Exception;
  * @property bool $isImagick Whether image manipulations will be performed using Imagick or not
  * @property array $supportedImageFormats A list of all supported image formats
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Images extends Component
 {
@@ -44,16 +42,17 @@ class Images extends Component
     // =========================================================================
 
     /**
-     * Image driver.
-     *
-     * @var string
+     * @var array Image formats that can be manipulated.
+     */
+    public $supportedImageFormats = ['jpg', 'jpeg', 'gif', 'png'];
+
+    /**
+     * @var string Image driver.
      */
     private $_driver = '';
 
     /**
-     * Imagick version being used, if any.
-     *
-     * @var string|null
+     * @var string|null Imagick version being used, if any.
      */
     private $_imagickVersion;
 
@@ -107,7 +106,7 @@ class Images extends Component
 
         $version = App::extensionVersion('imagick');
         try {
-            $version .= ' (ImageMagick '.$this->getImageMagickApiVersion().')';
+            $version .= ' (ImageMagick ' . $this->getImageMagickApiVersion() . ')';
         } catch (\Throwable $e) {
         }
         return $version;
@@ -120,29 +119,7 @@ class Images extends Component
      */
     public function getSupportedImageFormats(): array
     {
-        if ($this->getIsImagick()) {
-            return array_map('strtolower', Imagick::queryFormats());
-        }
-
-        $output = [];
-        $map = [
-            IMG_JPG => ['jpg', 'jpeg'],
-            IMG_GIF => ['gif'],
-            IMG_PNG => ['png'],
-        ];
-
-        // IMG_WEBP was added in PHP 7.0.10
-        if (defined('IMG_WEBP')) {
-            $map[IMG_WEBP] = ['webp'];
-        }
-
-        foreach ($map as $key => $extensions) {
-            if (imagetypes() & $key) {
-                $output = array_merge($output, $extensions);
-            }
-        }
-
-        return $output;
+        return $this->supportedImageFormats;
     }
 
     /**
@@ -164,7 +141,7 @@ class Images extends Component
         // Taken from Imagick\Imagine() constructor.
         // Imagick::getVersion() is static only since Imagick PECL extension 3.2.0b1, so instantiate it.
         /** @noinspection PhpStaticAsDynamicMethodCallInspection */
-        $versionString = (new \Imagick)::getVersion()['versionString'];
+        $versionString = \Imagick::getVersion()['versionString'];
         list($this->_imagickVersion) = sscanf($versionString, 'ImageMagick %s %04d-%02d-%02d %s %s');
 
         return $this->_imagickVersion;
@@ -311,7 +288,7 @@ class Images extends Component
 
             $cleanedByStripping = $this->stripOrientationFromExifData($filePath);
         } catch (\Throwable $e) {
-            Craft::error('Tried to rotate or strip EXIF data from image and failed: '.$e->getMessage(), __METHOD__);
+            Craft::error('Tried to rotate or strip EXIF data from image and failed: ' . $e->getMessage(), __METHOD__);
         }
 
         // Image has already been cleaned if it had exif/orientation data
@@ -403,6 +380,7 @@ class Images extends Component
 
         $image = new \Imagick($filePath);
         $image->setImageOrientation(\Imagick::ORIENTATION_UNDEFINED);
+        ImageHelper::cleanExifDataFromImagickImage($image);
         $image->writeImages($filePath, true);
 
         return true;

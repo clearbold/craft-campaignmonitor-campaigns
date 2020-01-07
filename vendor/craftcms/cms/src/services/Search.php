@@ -11,12 +11,14 @@ use Craft;
 use craft\base\Element;
 use craft\base\ElementInterface;
 use craft\base\Field;
-use craft\config\DbConfig;
 use craft\db\Query;
+use craft\db\Table;
+use craft\errors\SiteNotFoundException;
 use craft\events\SearchEvent;
 use craft\helpers\Db;
 use craft\helpers\Search as SearchHelper;
 use craft\helpers\StringHelper;
+use craft\models\Site;
 use craft\search\SearchQuery;
 use craft\search\SearchQueryTerm;
 use craft\search\SearchQueryTermGroup;
@@ -28,7 +30,7 @@ use yii\db\Schema;
  * An instance of the Search service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getSearch()|`Craft::$app->search`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Search extends Component
 {
@@ -100,24 +102,61 @@ class Search extends Component
      *
      * @param ElementInterface $element
      * @return bool Whether the indexing was a success.
-     * @throws \craft\errors\SiteNotFoundException
+     * @throws SiteNotFoundException
      */
     public function indexElementAttributes(ElementInterface $element): bool
     {
+        // Acquire a lock for this element/site ID
+        $mutex = Craft::$app->getMutex();
         /** @var Element $element */
-        // Does it have any searchable attributes?
-        $searchableAttributes = $element::searchableAttributes();
+        $lockKey = "searchindex:{$element->id}:{$element->siteId}";
 
-        $searchableAttributes[] = 'slug';
-
-        if ($element::hasTitles()) {
-            $searchableAttributes[] = 'title';
+        if (!$mutex->acquire($lockKey)) {
+            // Not worth waiting around; for all we know the other process has newer search attributes anyway
+            return true;
         }
 
-        foreach ($searchableAttributes as $attribute) {
+        // Clear the element's current search keywords
+        Craft::$app->getDb()->createCommand()
+            ->delete(Table::SEARCHINDEX, [
+                'elementId' => $element->id,
+                'siteId' => $element->siteId,
+            ])
+            ->execute();
+
+        // Does it have any searchable attributes?
+        $searchableAttributes = array_flip($element::searchableAttributes());
+
+        $searchableAttributes['slug'] = true;
+
+        if ($element::hasTitles()) {
+            $searchableAttributes['title'] = true;
+        }
+
+        foreach (array_keys($searchableAttributes) as $attribute) {
             $value = $element->getSearchKeywords($attribute);
             $this->_indexElementKeywords($element->id, $attribute, '0', $element->siteId, $value);
         }
+
+        // Custom fields too?
+        if ($element::hasContent() && ($fieldLayout = $element->getFieldLayout()) !== null) {
+            $keywords = [];
+
+            foreach ($fieldLayout->getFields() as $field) {
+                /** @var Field $field */
+                if ($field->searchable) {
+                    // Set the keywords for the content's site
+                    $fieldValue = $element->getFieldValue($field->handle);
+                    $fieldSearchKeywords = $field->getSearchKeywords($fieldValue, $element);
+                    $keywords[$field->id] = $fieldSearchKeywords;
+                }
+            }
+
+            $this->indexElementFields($element->id, $element->siteId, $keywords);
+        }
+
+        // Release the lock
+        $mutex->release($lockKey);
 
         return true;
     }
@@ -129,7 +168,7 @@ class Search extends Component
      * @param int $siteId The site ID of the content getting indexed.
      * @param array $fields The field values, indexed by field ID.
      * @return bool Whether the indexing was a success.
-     * @throws \craft\errors\SiteNotFoundException
+     * @throws SiteNotFoundException
      */
     public function indexElementFields(int $elementId, int $siteId, array $fields): bool
     {
@@ -146,11 +185,11 @@ class Search extends Component
      * @param int[] $elementIds The list of element IDs to filter by the search query.
      * @param string|array|SearchQuery $query The search query (either a string or a SearchQuery instance)
      * @param bool $scoreResults Whether to order the results based on how closely they match the query.
-     * @param int|null $siteId The site ID to filter by.
+     * @param int|int[]|null $siteId The site ID(s) to filter by.
      * @param bool $returnScores Whether the search scores should be included in the results. If true, results will be returned as `element ID => score`.
      * @return array The filtered list of element IDs.
      */
-    public function filterElementIdsByQuery(array $elementIds, $query, bool $scoreResults = true, int $siteId = null, bool $returnScores = false): array
+    public function filterElementIdsByQuery(array $elementIds, $query, bool $scoreResults = true, $siteId = null, bool $returnScores = false): array
     {
         if (is_string($query)) {
             $query = new SearchQuery($query, Craft::$app->getConfig()->getGeneral()->defaultSearchTermOptions);
@@ -192,23 +231,32 @@ class Search extends Component
             return [];
         }
 
+        $db = Craft::$app->getDb();
+
         if ($siteId !== null) {
-            $where .= sprintf(' AND %s = %s', Craft::$app->getDb()->quoteColumnName('siteId'), Craft::$app->getDb()->quoteValue($siteId));
+            if (is_array($siteId)) {
+                $where .= sprintf(' AND %s IN (%s)',
+                    $db->quoteColumnName('siteId'),
+                    implode(',', $siteId)
+                );
+            } else {
+                $where .= sprintf(' AND %s = %s', $db->quoteColumnName('siteId'), $db->quoteValue($siteId));
+            }
         }
 
         // Begin creating SQL
-        $sql = sprintf('SELECT * FROM %s WHERE %s', Craft::$app->getDb()->quoteTableName('{{%searchindex}}'), $where);
+        $sql = sprintf('SELECT * FROM %s WHERE %s', $db->quoteTableName(Table::SEARCHINDEX), $where);
 
         // Append elementIds to QSL
         if (!empty($elementIds)) {
             $sql .= sprintf(' AND %s IN (%s)',
-                Craft::$app->getDb()->quoteColumnName('elementId'),
+                $db->quoteColumnName('elementId'),
                 implode(',', $elementIds)
             );
         }
 
         // Execute the sql
-        $results = Craft::$app->getDb()->createCommand($sql)->queryAll();
+        $results = $db->createCommand($sql)->queryAll();
 
         // Are we scoring the results?
         if ($scoreResults) {
@@ -229,6 +277,15 @@ class Search extends Component
             // Sort found elementIds by score
             arsort($scoresByElementId);
 
+            // Fire an 'afterSearch' event
+            if ($this->hasEventHandlers(self::EVENT_AFTER_SEARCH)) {
+                $this->trigger(self::EVENT_AFTER_SEARCH, new SearchEvent([
+                    'elementIds' => array_keys($scoresByElementId),
+                    'query' => $query,
+                    'siteId' => $siteId,
+                ]));
+            }
+
             if ($returnScores) {
                 return $scoresByElementId;
             }
@@ -246,7 +303,7 @@ class Search extends Component
 
         $elementIds = array_unique($elementIds);
 
-        // Fire a 'beforeSearch' event
+        // Fire an 'afterSearch' event
         if ($this->hasEventHandlers(self::EVENT_AFTER_SEARCH)) {
             $this->trigger(self::EVENT_AFTER_SEARCH, new SearchEvent([
                 'elementIds' => $elementIds,
@@ -258,6 +315,32 @@ class Search extends Component
         return $elementIds;
     }
 
+    /**
+     * Deletes any search indexes that belong to elements that don’t exist anymore.
+     *
+     * @since 3.2.10
+     */
+    public function deleteOrphanedIndexes()
+    {
+        $db = Craft::$app->getDb();
+        if ($db->getIsMysql()) {
+            $sql = <<<SQL
+DELETE s.* FROM {{%searchindex}} s
+LEFT JOIN {{%elements}} e ON e.id = s.elementId
+WHERE e.id IS NULL
+SQL;
+        } else {
+            $sql = <<<SQL
+DELETE FROM {{%searchindex}} s
+WHERE NOT EXISTS (
+    SELECT * FROM {{%elements}}
+    WHERE id = s."elementId"
+)
+SQL;
+        }
+        $db->createCommand($sql)->execute();
+    }
+
     // Private Methods
     // =========================================================================
 
@@ -267,36 +350,35 @@ class Search extends Component
      * @param int $elementId
      * @param string $attribute
      * @param string $fieldId
-     * @param int|null $siteId
+     * @param int $siteId
      * @param string $dirtyKeywords
-     * @throws \craft\errors\SiteNotFoundException
+     * @throws SiteNotFoundException
      */
-    private function _indexElementKeywords(int $elementId, string $attribute, string $fieldId, int $siteId = null, string $dirtyKeywords)
+    private function _indexElementKeywords(int $elementId, string $attribute, string $fieldId, int $siteId, string $dirtyKeywords)
     {
-        $attribute = StringHelper::toLowerCase($attribute);
-        $driver = Craft::$app->getDb()->getDriverName();
+        $attribute = strtolower($attribute);
 
-        if ($siteId === null) {
-            $siteId = Craft::$app->getSites()->getPrimarySite()->id;
-        }
+        /** @var Site $site */
+        $site = Craft::$app->getSites()->getSiteById($siteId);
 
         // Clean 'em up
-        $cleanKeywords = SearchHelper::normalizeKeywords($dirtyKeywords);
+        $cleanKeywords = SearchHelper::normalizeKeywords($dirtyKeywords, [], true, $site->language);
 
         // Save 'em
-        $keyColumns = [
+        $columns = [
             'elementId' => $elementId,
             'attribute' => $attribute,
             'fieldId' => $fieldId,
-            'siteId' => $siteId
+            'siteId' => $site->id,
         ];
 
         if ($cleanKeywords !== null && $cleanKeywords !== false && $cleanKeywords !== '') {
             // Add padding around keywords
-            $cleanKeywords = ' '.$cleanKeywords.' ';
+            $cleanKeywords = ' ' . $cleanKeywords . ' ';
         }
 
-        if ($driver === DbConfig::DRIVER_PGSQL) {
+        $db = Craft::$app->getDb();
+        if ($isPgsql = $db->getIsPgsql()) {
             $maxSize = $this->maxPostgresKeywordLength;
         } else {
             $maxSize = Db::getTextualColumnStorageCapacity(Schema::TYPE_TEXT);
@@ -306,20 +388,15 @@ class Search extends Component
             $cleanKeywords = $this->_truncateSearchIndexKeywords($cleanKeywords, $maxSize);
         }
 
-        $keywordColumns = ['keywords' => $cleanKeywords];
+        $columns['keywords'] = $cleanKeywords;
 
-        if ($driver === DbConfig::DRIVER_PGSQL) {
-            $keywordColumns['keywords_vector'] = $cleanKeywords;
+        if ($isPgsql) {
+            $columns['keywords_vector'] = $cleanKeywords;
         }
 
         // Insert/update the row in searchindex
-        Craft::$app->getDb()->createCommand()
-            ->upsert(
-                '{{%searchindex}}',
-                $keyColumns,
-                $keywordColumns,
-                [],
-                false)
+        $db->createCommand()
+            ->insert(Table::SEARCHINDEX, $columns, false)
             ->execute();
     }
 
@@ -371,7 +448,7 @@ class Search extends Component
 
         // Account for substrings
         if (!$term->subLeft) {
-            $keywords = ' '.$keywords;
+            $keywords = ' ' . $keywords;
         }
 
         if (!$term->subRight) {
@@ -410,10 +487,10 @@ class Search extends Component
     /**
      * Get the complete where clause for current tokens
      *
-     * @param int|null $siteId The site ID to search within
+     * @param int|int[]|null $siteId The site ID(s) to search within
      * @return string|false
      */
-    private function _getWhereClause(int $siteId = null)
+    private function _getWhereClause($siteId)
     {
         $where = [];
 
@@ -448,15 +525,17 @@ class Search extends Component
      *
      * @param array $tokens
      * @param bool $inclusive
-     * @param int|null $siteId
+     * @param int|int[]|null $siteId
      * @return string|false
      * @throws \Throwable
      */
-    private function _processTokens(array $tokens = [], bool $inclusive = true, int $siteId = null)
+    private function _processTokens(array $tokens, bool $inclusive, $siteId)
     {
         $glue = $inclusive ? ' AND ' : ' OR ';
         $where = [];
         $words = [];
+
+        $db = Craft::$app->getDb();
 
         foreach ($tokens as $obj) {
             // Get SQL and/or keywords
@@ -471,8 +550,8 @@ class Search extends Component
                 $where[] = $sql;
             } // No SQL but keywords, save them for later
             else if ($keywords !== null && $keywords !== '') {
-                if ($inclusive && Craft::$app->getDb()->getIsMysql()) {
-                    $keywords = '+'.$keywords;
+                if ($inclusive && $db->getIsMysql()) {
+                    $keywords = '+' . $keywords;
                 }
 
                 $words[] = $keywords;
@@ -507,11 +586,11 @@ class Search extends Component
      * or returns keywords to use in a full text search clause
      *
      * @param SearchQueryTerm $term
-     * @param int|null $siteId
+     * @param int|int[]|null $siteId
      * @return array
      * @throws \Throwable
      */
-    private function _getSqlFromTerm(SearchQueryTerm $term, int $siteId = null): array
+    private function _getSqlFromTerm(SearchQueryTerm $term, $siteId): array
     {
         // Initiate return value
         $sql = null;
@@ -561,12 +640,22 @@ class Search extends Component
 
                         // Add quotes for exact match
                         if ($isMysql && StringHelper::contains($keywords, ' ')) {
-                            $keywords = '"'.$keywords.'"';
+                            if (StringHelper::first($keywords, 1) === '*') {
+                                $keywords = StringHelper::insert($keywords, '"', 1);
+                            } else {
+                                $keywords = '"' . $keywords;
+                            }
+
+                            if (StringHelper::last($keywords, 1) === '*') {
+                                $keywords = StringHelper::insert($keywords, '"', StringHelper::length($keywords) - 1);
+                            } else {
+                                $keywords .= '"';
+                            }
                         }
 
                         // Determine prefix for the full-text keyword
                         if ($term->exclude) {
-                            $keywords = '-'.$keywords;
+                            $keywords = '-' . $keywords;
                         }
 
                         // Only create an SQL clause if there's a subselect. Otherwise, return the keywords.
@@ -579,11 +668,11 @@ class Search extends Component
                         if ($term->exact) {
                             // Create exact clause from term
                             $operator = $term->exclude ? 'NOT LIKE' : 'LIKE';
-                            $keywords = ($term->subLeft ? '%' : ' ').$keywords.($term->subRight ? '%' : ' ');
+                            $keywords = ($term->subLeft ? '%' : ' ') . $keywords . ($term->subRight ? '%' : ' ');
                         } else {
                             // Create LIKE clause from term
                             $operator = $term->exclude ? 'NOT LIKE' : 'LIKE';
-                            $keywords = ($term->subLeft ? '%' : '% ').$keywords.($term->subRight ? '%' : ' %');
+                            $keywords = ($term->subLeft ? '%' : '% ') . $keywords . ($term->subRight ? '%' : ' %');
                         }
 
                         // Generate the SQL
@@ -600,7 +689,7 @@ class Search extends Component
 
         // If we have a where clause in the subselect, add the keyword bit to it.
         if ($subSelect !== null && $sql !== null) {
-            $sql = $this->_sqlSubSelect($subSelect.' AND '.$sql, $siteId);
+            $sql = $this->_sqlSubSelect($subSelect . ' AND ' . $sql, $siteId);
 
             // We need to reset keywords even if the subselect ended up in no results.
             $keywords = null;
@@ -668,8 +757,10 @@ class Search extends Component
      */
     private function _sqlFullText($val, bool $bool = true, string $glue = ' AND '): string
     {
-        if (Craft::$app->getDb()->getIsMysql()) {
-            return sprintf("MATCH(%s) AGAINST('%s'%s)", Craft::$app->getDb()->quoteColumnName('keywords'), (is_array($val) ? implode(' ', $val) : $val), ($bool ? ' IN BOOLEAN MODE' : ''));
+        $db = Craft::$app->getDb();
+
+        if ($db->getIsMysql()) {
+            return sprintf("MATCH(%s) AGAINST('%s'%s)", $db->quoteColumnName('keywords'), (is_array($val) ? implode(' ', $val) : $val), ($bool ? ' IN BOOLEAN MODE' : ''));
         }
 
         if ($glue === ' AND ') {
@@ -686,23 +777,29 @@ class Search extends Component
                     $val[$key] = $temp;
                 }
             }
+        } else {
+            // If where here, it's a single string with punctuation that's been stripped out (i.e. "multi-site").
+            // We can assume "and".
+            if (StringHelper::contains($val, ' ')) {
+                $val = StringHelper::replace($val, ' ', ' & ');
+            }
         }
 
-        return sprintf("%s @@ '%s'::tsquery", Craft::$app->getDb()->quoteColumnName('keywords_vector'), (is_array($val) ? implode($glue, $val) : $val));
+        return sprintf("%s @@ '%s'::tsquery", $db->quoteColumnName('keywords_vector'), (is_array($val) ? implode($glue, $val) : $val));
     }
 
     /**
      * Get SQL bit for sub-selects.
      *
      * @param string $where
-     * @param int|null $siteId
+     * @param int|int[]|null $siteId
      * @return string|false
      */
-    private function _sqlSubSelect(string $where, int $siteId = null)
+    private function _sqlSubSelect(string $where, $siteId)
     {
         $query = (new Query())
             ->select(['elementId'])
-            ->from(['{{%searchindex}}'])
+            ->from([Table::SEARCHINDEX])
             ->where($where);
 
         if ($siteId !== null) {
@@ -712,7 +809,7 @@ class Search extends Component
         $elementIds = $query->column();
 
         if (!empty($elementIds)) {
-            return Craft::$app->getDb()->quoteColumnName('elementId').' IN ('.implode(', ', $elementIds).')';
+            return Craft::$app->getDb()->quoteColumnName('elementId') . ' IN (' . implode(', ', $elementIds) . ')';
         }
 
         return false;
@@ -741,10 +838,11 @@ class Search extends Component
     {
         $ftVal = explode(' ', $val);
         $ftVal = implode(' & ', $ftVal);
+        $likeVal = !$exact ? '%' . $val . '%' : $val;
 
-        $likeVal = !$exact ? '%'.$val.'%' : $val;
+        $db = Craft::$app->getDb();
 
-        return sprintf("%s @@ '%s'::tsquery AND %s LIKE '%s'", Craft::$app->getDb()->quoteColumnName('keywords_vector'), $ftVal, Craft::$app->getDb()->quoteColumnName('keywords'), $likeVal);
+        return sprintf("%s @@ '%s'::tsquery AND %s LIKE '%s'", $db->quoteColumnName('keywords_vector'), $ftVal, $db->quoteColumnName('keywords'), $likeVal);
     }
 
     /**

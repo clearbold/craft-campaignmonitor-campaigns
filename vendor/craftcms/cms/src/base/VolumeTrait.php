@@ -11,7 +11,7 @@ namespace craft\base;
  * VolumeTrait
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 trait VolumeTrait
 {
@@ -47,4 +47,9 @@ trait VolumeTrait
      * @var int|null Field layout ID
      */
     public $fieldLayoutId;
+
+    /**
+     * @var string|null UID
+     */
+    public $uid;
 }

@@ -9,7 +9,9 @@ namespace craft\services;
 
 use Craft;
 use craft\base\Volume;
+use craft\base\VolumeInterface;
 use craft\db\Query;
+use craft\db\Table;
 use craft\elements\Asset;
 use craft\elements\db\AssetQuery;
 use craft\elements\User;
@@ -30,8 +32,8 @@ use craft\helpers\Db;
 use craft\helpers\FileHelper;
 use craft\helpers\Image;
 use craft\helpers\Json;
-use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
+use craft\image\Raster;
 use craft\models\AssetTransform;
 use craft\models\FolderCriteria;
 use craft\models\VolumeFolder;
@@ -47,7 +49,7 @@ use yii\base\NotSupportedException;
  * An instance of the Assets service is globally accessible in Craft via [[\craft\base\ApplicationTrait::getAssets()|`Craft::$app->assets`]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class Assets extends Component
 {
@@ -86,7 +88,12 @@ class Assets extends Component
     /**
      * @var
      */
-    private $_foldersById;
+    private $_foldersById = [];
+
+    /**
+     * @var
+     */
+    private $_foldersByUid = [];
 
     /**
      * @var bool Whether a Generate Pending Transforms job has already been queued up in this request
@@ -105,10 +112,8 @@ class Assets extends Component
      */
     public function getAssetById(int $assetId, int $siteId = null)
     {
-        /** @var Asset|null $asset */
-        $asset = Craft::$app->getElements()->getElementById($assetId, Asset::class, $siteId);
-
-        return $asset;
+        /** @noinspection PhpIncompatibleReturnTypeInspection */
+        return Craft::$app->getElements()->getElementById($assetId, Asset::class, $siteId);
     }
 
     /**
@@ -146,11 +151,13 @@ class Assets extends Component
     {
         // Fire a 'beforeReplaceFile' event
         if ($this->hasEventHandlers(self::EVENT_BEFORE_REPLACE_ASSET)) {
-            $this->trigger(self::EVENT_BEFORE_REPLACE_ASSET, new ReplaceAssetEvent([
+            $event = new ReplaceAssetEvent([
                 'asset' => $asset,
                 'replaceWith' => $pathOnServer,
                 'filename' => $filename
-            ]));
+            ]);
+            $this->trigger(self::EVENT_BEFORE_REPLACE_ASSET, $event);
+            $filename = $event->filename;
         }
 
         $asset->tempFilePath = $pathOnServer;
@@ -202,7 +209,7 @@ class Assets extends Component
         $parent = $folder->getParent();
 
         if (!$parent) {
-            throw new InvalidArgumentException('Folder '.$folder->id.' doesn’t have a parent.');
+            throw new InvalidArgumentException('Folder ' . $folder->id . ' doesn’t have a parent.');
         }
 
         $existingFolder = $this->findFolder([
@@ -235,11 +242,11 @@ class Assets extends Component
      *
      * @param int $folderId
      * @param string $newName
-     * @throws AssetConflictException If a folder already exists with such name in Assets Index
+     * @return string The new folder name after cleaning it.
      * @throws AssetLogicException If the folder to be renamed can't be found or trying to rename the top folder.
      * @throws VolumeObjectExistsException If a folder already exists with such name in the Volume, but not in Index
      * @throws VolumeObjectNotFoundException If the folder to be renamed can't be found in the Volume.
-     * @return string The new folder name after cleaning it.
+     * @throws AssetConflictException If a folder already exists with such name in Assets Index
      */
     public function renameFolderById(int $folderId, string $newName): string
     {
@@ -269,7 +276,7 @@ class Assets extends Component
         }
 
         $parentFolderPath = dirname($folder->path);
-        $newFolderPath = (($parentFolderPath && $parentFolderPath !== '.') ? $parentFolderPath.'/' : '').$newName.'/';
+        $newFolderPath = (($parentFolderPath && $parentFolderPath !== '.') ? $parentFolderPath . '/' : '') . $newName . '/';
 
         $volume = $folder->getVolume();
 
@@ -277,7 +284,7 @@ class Assets extends Component
         $descendantFolders = $this->getAllDescendantFolders($folder);
 
         foreach ($descendantFolders as $descendantFolder) {
-            $descendantFolder->path = preg_replace('#^'.$folder->path.'#', $newFolderPath, $descendantFolder->path);
+            $descendantFolder->path = preg_replace('#^' . $folder->path . '#', $newFolderPath, $descendantFolder->path);
             $this->storeFolderRecord($descendantFolder);
         }
 
@@ -388,6 +395,29 @@ class Assets extends Component
     }
 
     /**
+     * Returns a folder by its UID.
+     *
+     * @param string $folderUid
+     * @return VolumeFolder|null
+     */
+    public function getFolderByUid(string $folderUid)
+    {
+        if ($this->_foldersByUid !== null && array_key_exists($folderUid, $this->_foldersByUid)) {
+            return $this->_foldersByUid[$folderUid];
+        }
+
+        $result = $this->_createFolderQuery()
+            ->where(['uid' => $folderUid])
+            ->one();
+
+        if (!$result) {
+            return $this->_foldersByUid[$folderUid] = null;
+        }
+
+        return $this->_foldersByUid[$folderUid] = new VolumeFolder($result);
+    }
+
+    /**
      * Finds folders that match a given criteria.
      *
      * @param mixed $criteria
@@ -440,7 +470,7 @@ class Assets extends Component
         $query = $this->_createFolderQuery()
             ->where([
                 'and',
-                ['like', 'path', $parentFolder->path.'%', false],
+                ['like', 'path', $parentFolder->path . '%', false],
                 ['volumeId' => $parentFolder->volumeId],
                 ['not', ['parentId' => null]]
             ]);
@@ -510,7 +540,7 @@ class Assets extends Component
         }
 
         $query = (new Query())
-            ->from(['{{%volumefolders}}']);
+            ->from([Table::VOLUMEFOLDERS]);
 
         $this->_applyFolderConditions($query, $criteria);
 
@@ -619,21 +649,12 @@ class Assets extends Component
             }
         }
 
-        $path = $this->getThumbPath($asset, $width, $height, $generate, $fallbackToIcon);
-
-        if ($path === false) {
-            return UrlHelper::actionUrl('assets/generate-thumb', [
-                'uid' => $asset->uid,
-                'width' => $width,
-                'height' => $height,
-                'v' => $asset->dateModified->getTimestamp(),
-            ]);
-        }
-
-        // Publish the thumb directory (if necessary) and return the thumb's published URL
-        $dir = dirname($path);
-        $name = pathinfo($path, PATHINFO_BASENAME);
-        return Craft::$app->getAssetManager()->getPublishedUrl($dir, true, $name);
+        return UrlHelper::actionUrl('assets/thumb', [
+            'uid' => $asset->uid,
+            'width' => $width,
+            'height' => $height,
+            'v' => $asset->dateModified->getTimestamp(),
+        ]);
     }
 
     /**
@@ -681,8 +702,8 @@ class Assets extends Component
 
         // Make the thumb a JPG if the image format isn't safe for web
         $ext = in_array($ext, Image::webSafeFormats(), true) ? $ext : 'jpg';
-        $dir = Craft::$app->getPath()->getAssetThumbsPath().DIRECTORY_SEPARATOR.$asset->id;
-        $path = $dir.DIRECTORY_SEPARATOR."thumb-{$width}x{$height}.{$ext}";
+        $dir = Craft::$app->getPath()->getAssetThumbsPath() . DIRECTORY_SEPARATOR . $asset->id;
+        $path = $dir . DIRECTORY_SEPARATOR . "thumb-{$width}x{$height}.{$ext}";
 
         if (!file_exists($path) || $asset->dateModified->getTimestamp() > filemtime($path)) {
             // Bail if we're not ready to generate it yet
@@ -697,12 +718,17 @@ class Assets extends Component
 
             // hail Mary
             try {
-                Craft::$app->getImages()->loadImage($imageSource, false, $svgSize)
-                    ->scaleToFit($width, $height)
-                    ->saveAs($path);
+                $image = Craft::$app->getImages()->loadImage($imageSource, false, $svgSize);
+
+                // Prevent resize of all layers
+                if ($image instanceof Raster) {
+                    $image->disableAnimation();
+                }
+
+                $image->scaleToFit($width, $height);
+                $image->saveAs($path);
             } catch (ImageException $exception) {
                 Craft::warning($exception->getMessage());
-
                 return $this->getIconPath($asset);
             }
         }
@@ -720,7 +746,7 @@ class Assets extends Component
     public function getIconPath(Asset $asset): string
     {
         $ext = $asset->getExtension();
-        $path = Craft::$app->getPath()->getAssetsIconsPath().DIRECTORY_SEPARATOR.strtolower($ext).'.svg';
+        $path = Craft::$app->getPath()->getAssetsIconsPath() . DIRECTORY_SEPARATOR . strtolower($ext) . '.svg';
 
         if (file_exists($path)) {
             return $path;
@@ -735,12 +761,12 @@ class Assets extends Component
             $textSize = '22';
         } else {
             if ($extLength > 5) {
-                $ext = substr($ext, 0, 4).'…';
+                $ext = substr($ext, 0, 4) . '…';
             }
             $textSize = '18';
         }
 
-        $textNode = "<text x=\"50\" y=\"73\" text-anchor=\"middle\" font-family=\"sans-serif\" fill=\"#8F98A3\" font-size=\"{$textSize}\">".strtoupper($ext).'</text>';
+        $textNode = "<text x=\"50\" y=\"73\" text-anchor=\"middle\" font-family=\"sans-serif\" fill=\"#8F98A3\" font-size=\"{$textSize}\">" . strtoupper($ext) . '</text>';
         $svg = str_replace('<!-- EXT -->', $textNode, $svg);
 
         FileHelper::writeToFile($path, $svg);
@@ -761,7 +787,7 @@ class Assets extends Component
         $folder = $this->getFolderById($folderId);
 
         if (!$folder) {
-            throw new InvalidArgumentException('Invalid folder ID: '.$folderId);
+            throw new InvalidArgumentException('Invalid folder ID: ' . $folderId);
         }
 
         $volume = $folder->getVolume();
@@ -771,26 +797,30 @@ class Assets extends Component
         $existingFiles = [];
 
         foreach ($fileList as $file) {
-            if (StringHelper::toLowerCase(rtrim($folder->path, '/')) === StringHelper::toLowerCase($file['dirname'])) {
-                $existingFiles[StringHelper::toLowerCase($file['basename'])] = true;
+            if (mb_strtolower(rtrim($folder->path, '/')) === mb_strtolower($file['dirname'])) {
+                $existingFiles[mb_strtolower($file['basename'])] = true;
             }
         }
 
         // Get a list from DB as well
         $fileList = (new Query())
-            ->select(['filename'])
-            ->from(['{{%assets}}'])
-            ->where(['folderId' => $folderId])
+            ->select(['assets.filename'])
+            ->from(['{{%assets}} assets'])
+            ->innerJoin(['{{%elements}} elements'], '[[assets.id]] = [[elements.id]]')
+            ->where([
+                'assets.folderId' => $folderId,
+                'elements.dateDeleted' => null
+            ])
             ->column();
 
         // Combine the indexed list and the actual file list to make the final potential conflict list.
         foreach ($fileList as $file) {
-            $existingFiles[StringHelper::toLowerCase($file)] = true;
+            $existingFiles[mb_strtolower($file)] = true;
         }
 
         // Shorthand.
         $canUse = function($filenameToTest) use ($existingFiles) {
-            return !isset($existingFiles[StringHelper::toLowerCase($filenameToTest)]);
+            return !isset($existingFiles[mb_strtolower($filenameToTest)]);
         };
 
         if ($canUse($originalFilename)) {
@@ -805,10 +835,10 @@ class Assets extends Component
             $base = $filename;
         } else {
             $timestamp = DateTimeHelper::currentUTCDateTime()->format('ymd_His');
-            $base = $filename.'_'.$timestamp;
+            $base = $filename . '_' . $timestamp;
         }
 
-        $newFilename = $base.'.'.$extension;
+        $newFilename = $base . '.' . $extension;
 
         if ($canUse($newFilename)) {
             return $newFilename;
@@ -817,7 +847,7 @@ class Assets extends Component
         $increment = 0;
 
         while (++$increment) {
-            $newFilename = $base.'_'.$increment.'.'.$extension;
+            $newFilename = $base . '_' . $increment . '.' . $extension;
 
             if ($canUse($newFilename)) {
                 break;
@@ -837,13 +867,14 @@ class Assets extends Component
      * Ensure a folder entry exists in the DB for the full path and return it's id. Depending on the use, it's possible to also ensure a physical folder exists.
      *
      * @param string $fullPath The path to ensure the folder exists at.
-     * @param Volume $volume
+     * @param VolumeInterface $volume
      * @param bool $justRecord If set to false, will also make sure the physical folder exists on Volume.
      * @return int
      * @throws VolumeException If the volume cannot be found.
      */
-    public function ensureFolderByFullPathAndVolume(string $fullPath, Volume $volume, bool $justRecord = true): int
+    public function ensureFolderByFullPathAndVolume(string $fullPath, VolumeInterface $volume, bool $justRecord = true): int
     {
+        /** @var Volume $volume */
         $parentId = Craft::$app->getVolumes()->ensureTopFolder($volume);
         $folderId = $parentId;
 
@@ -855,7 +886,7 @@ class Assets extends Component
             $path = '';
 
             while (($part = array_shift($parts)) !== null) {
-                $path .= $part.'/';
+                $path .= $part . '/';
 
                 $parameters = new FolderCriteria([
                     'path' => $path,
@@ -910,26 +941,61 @@ class Assets extends Component
         $record->save();
 
         $folder->id = $record->id;
+        $folder->uid = $record->uid;
     }
 
     /**
      * Return the current user's temporary upload folder.
      *
      * @return VolumeFolder
+     * @deprecated in 3.2.0. Use [[getUserTemporaryUploadFolder()]] instead.
      */
     public function getCurrentUserTemporaryUploadFolder()
     {
-        return $this->getUserTemporaryUploadFolder(Craft::$app->getUser()->getIdentity());
+        return $this->getUserTemporaryUploadFolder();
     }
 
     /**
-     * Get the user's temporary upload folder.
+     * Returns the given user's temporary upload folder.
      *
-     * @param User|null $userModel
+     * If no user is provided, the currently-logged in user will be used (if there is one), or a folder named after
+     * the current session ID.
+     *
+     * @param User|null $user
      * @return VolumeFolder
+     * @throws VolumeException
      */
-    public function getUserTemporaryUploadFolder(User $userModel = null)
+    public function getUserTemporaryUploadFolder(User $user = null)
     {
+        if ($user === null) {
+            // Default to the logged-in user, if there is one
+            $user = Craft::$app->getUser()->getIdentity();
+        }
+
+        if ($user) {
+            $folderName = 'user_' . $user->id;
+        } else {
+            // A little obfuscation never hurt anyone
+            $folderName = 'user_' . sha1(Craft::$app->getSession()->id);
+        }
+
+        // Is there a designated temp uploads volume?
+        $assetSettings = Craft::$app->getProjectConfig()->get('assets');
+        if (isset($assetSettings['tempVolumeUid'])) {
+            $volume = Craft::$app->getVolumes()->getVolumeByUid($assetSettings['tempVolumeUid']);
+            if (!$volume) {
+                throw new VolumeException(Craft::t('app', 'The volume set for temp asset storage is not valid.'));
+            }
+            /** @var Volume $volume */
+            $path = (isset($assetSettings['tempSubpath']) ? $assetSettings['tempSubpath'] . '/' : '') .
+                $folderName;
+            $folderId = $this->ensureFolderByFullPathAndVolume($path, $volume, false);
+            return $this->findFolder([
+                'volumeId' => $volume->id,
+                'id' => $folderId,
+            ]);
+        }
+
         $volumeTopFolder = $this->findFolder([
             'volumeId' => ':empty:',
             'parentId' => ':empty:'
@@ -943,13 +1009,6 @@ class Assets extends Component
             $this->storeFolderRecord($volumeTopFolder);
         }
 
-        if ($userModel) {
-            $folderName = 'user_'.$userModel->id;
-        } else {
-            // A little obfuscation never hurt anyone
-            $folderName = 'user_'.sha1(Craft::$app->getSession()->id);
-        }
-
         $folder = $this->findFolder([
             'name' => $folderName,
             'parentId' => $volumeTopFolder->id
@@ -959,15 +1018,12 @@ class Assets extends Component
             $folder = new VolumeFolder();
             $folder->parentId = $volumeTopFolder->id;
             $folder->name = $folderName;
-            $folder->path = $folderName.'/';
+            $folder->path = $folderName . '/';
             $this->storeFolderRecord($folder);
         }
 
-        FileHelper::createDirectory(Craft::$app->getPath()->getTempAssetUploadsPath().DIRECTORY_SEPARATOR.$folderName);
+        FileHelper::createDirectory(Craft::$app->getPath()->getTempAssetUploadsPath() . DIRECTORY_SEPARATOR . $folderName);
 
-        /**
-         * @var VolumeFolder $folder ;
-         */
         return $folder;
     }
 
@@ -982,8 +1038,8 @@ class Assets extends Component
     private function _createFolderQuery(): Query
     {
         return (new Query())
-            ->select(['id', 'parentId', 'volumeId', 'name', 'path'])
-            ->from(['{{%volumefolders}}']);
+            ->select(['id', 'parentId', 'volumeId', 'name', 'path', 'uid'])
+            ->from([Table::VOLUMEFOLDERS]);
     }
 
     /**
@@ -1036,6 +1092,10 @@ class Assets extends Component
 
         if ($criteria->name) {
             $query->andWhere(Db::parseParam('name', $criteria->name));
+        }
+
+        if ($criteria->uid) {
+            $query->andWhere(Db::parseParam('uid', $criteria->uid));
         }
 
         if ($criteria->path !== null) {
